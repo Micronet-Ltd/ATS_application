@@ -1,0 +1,15 @@
+<<<<<<< HEAD
+<resources>
+    <string name="app_name">Testrtc</string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+=======
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">A317 Telematics Service</string>
+    <string name="action_settings">Settings</string>
+
+>>>>>>> cc5eb6419479d7d3c79d25f18290ccc2a6b2f769
+</resources>

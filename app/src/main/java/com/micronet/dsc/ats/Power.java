@@ -212,9 +212,9 @@ public class Power {
         int dst_adjustment = raw_offset - wdst_offset;
 
         if (dst_adjustment != 0) {
-            Log.v(TAG, " Alarm DST Adjustment = " + dst_adjustment);
+            Log.v(TAG, " Alarm DST Adjustment = " + dst_adjustment + ", TZ offset = " + raw_offset + ", current offset = " + wdst_offset);
         } else {
-            Log.v(TAG, " Alarm No DST Adjustment needed, offset = " + raw_offset +
+            Log.v(TAG, " Alarm No DST Adjustment needed, TZ offset = " + raw_offset +
                             " dst " + tz.useDaylightTime() + " " + tz.inDaylightTime(new Date(next_alarm_time*1000))
             );
         }
@@ -227,6 +227,7 @@ public class Power {
             next_alarm_time += 86400; // go forward another day
             wdst_offset = tz.getOffset(next_alarm_time*1000) / 1000 ; // figure out the offset of that new day in seconds
             dst_adjustment = raw_offset - wdst_offset; // and the adjustment we'll need
+            Log.v(TAG, " New Alarm DST Adjustment = " + dst_adjustment + ", TZ offset = " + raw_offset + ", current offset = " + wdst_offset);
             next_alarm_time += dst_adjustment;  // and make that adjustment
         }
 
