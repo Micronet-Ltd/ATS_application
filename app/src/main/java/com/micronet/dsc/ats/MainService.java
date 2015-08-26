@@ -36,13 +36,15 @@ public class MainService extends Service {
     // Features that were requested during development and later withdrawn:
     //  Generally, these should always be false unless they are requested again:
     public static final boolean SHOULD_WRITE_FAKE_CONFIGURATION_XML = false; // Write fake entry #0 to configuration files to make sure they exist
-    public static final boolean SHOULD_BROADCAST_REDBEND_ON_HEARTBEAT = false; // send brodcast to redbend on heartbeat
     public static final boolean SHOULD_SELF_DESTROY_ON_SHUTDOWN = false; // the service should try to kill itself when OS is shutting down, before the OS does it.
 
     // Features that are likely to be removed later
-    // Generally these should always be true
+    // Generally, these should always be true
     public static final boolean SHOULD_ALLOW_INPUT6_AS_IGNITION = true; // allow input6 to take over as the ignition line
 
+    // Features that were previously disabled and now enabled again
+    // Generally, these should always be true
+    public static final boolean SHOULD_BROADCAST_REDBEND_ON_HEARTBEAT = true; // send broadcast to redbend on heartbeat
 
     /////////////////////////////////////
     // Begin actual class
@@ -208,7 +210,7 @@ public class MainService extends Service {
 
                     addEvent(QueueItem.EVENT_TYPE_HEARTBEAT);
 
-                    power.requestOSUpdate();
+                    power.openFOTAUpdateWindow(keepawake_sec);
                 }
             } else if (scheduled_id == 1) {
                 // this was started by a scheduled wakeup alarm, we want to acquire a lock
@@ -265,12 +267,13 @@ public class MainService extends Service {
 
                     addEvent(QueueItem.EVENT_TYPE_HEARTBEAT);
 
-                    power.requestOSUpdate();
+                    power.openFOTAUpdateWindow(keepawake_sec);
                 }
                 if (power.wasCurrentAlarmRecent(Power.ALARM_SCHEDULED_NAME)) {
 
                     Log.i(TAG, "  Last scheduled wakeup was recent, assuming this caused boot.");
                     // this was started by an alarm, we want to acquire a lock and trigger an event
+
 
                     int keepawake_sec = config.readParameterInt(Config.SETTING_SCHEDULED_WAKEUP, Config.PARAMETER_SCHEDULED_WAKEUP_KEEPAWAKE);
                     power.setScheduledWakeLock(keepawake_sec);

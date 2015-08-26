@@ -16,10 +16,12 @@ import android.content.Intent;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
+import android.net.NetworkInfo;
+import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
-import android.provider.Settings;
-import android.support.v4.content.WakefulBroadcastReceiver;
+//import android.provider.Settings;
+//import android.support.v4.content.WakefulBroadcastReceiver;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -71,6 +73,8 @@ public class Power {
     // (wakelocks related to I/O are in the Io class file)
 
 
+    boolean powerdownWasSent = false; // this will be set to true once we send a power-down request so only one will be sent
+
     public Power(MainService service) {
         this.service = service;
     }
@@ -85,13 +89,28 @@ public class Power {
         registerTimeChanges();
         exec = new ScheduledThreadPoolExecutor(1);
         exec.scheduleWithFixedDelay(new PowerDownTask(), 1000, 1000, TimeUnit.MILLISECONDS); // every 1 second, check if we should power down
-    }
+
+
+        // Register a Listener to catch redbend updates
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("SwmClient.NEW_UPDATE_AVAILABLE");
+        filter.addAction("SwmClient.DMA UPDATE_FINISHED");
+        filter.addAction("SwmClient.UPDATE_FINISHED_FAILED");
+
+        mainHandler  = new Handler(); // initialize
+        service.context.registerReceiver(redbendReceiver, filter);
+
+    } // start()
 
     ////////////////////////////////////////////////////////////////////
     // stop()
     //      Stops all monitoring (time changes, etc.), called when app is ending
     ////////////////////////////////////////////////////////////////////
     public void stop() {
+        service.context.unregisterReceiver(redbendReceiver);
+
+        closeFOTAUpdateWindow(); // if it was opened
+
         if (exec != null)
             exec.shutdown();
 
@@ -470,7 +489,7 @@ public class Power {
 
         wl.release();
         return null;
-    }
+    } // cancelWakeLock()
 
     /////////////////////////////////////////////////////////////////
     // changeWakeLock
@@ -533,7 +552,7 @@ public class Power {
 //        setPowerDownDelay();
 
         return newwl;
-    }
+    } // changeWakeLock()
 
 
 
@@ -710,10 +729,20 @@ public class Power {
         //return pm.isInteractive();
     }
 
+
+
     void powerDown() {
-        Log.i(TAG, "Powering Down (expect 7s delay)");
-        PowerManager pm=(PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
-        pm.reboot(micronet.hardware.MicronetHardware.SHUTDOWN_DEVICE);
+
+        // Do not ever re-send a power down request
+
+        if (powerdownWasSent) {
+            Log.i(TAG, "Skipping Power Down Request (already sent)");
+        } else {
+            Log.i(TAG, "Sending Power Down Request (expect 7s delay)");
+            powerdownWasSent = true;
+            PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
+            pm.reboot(micronet.hardware.MicronetHardware.SHUTDOWN_DEVICE);
+        }
 
     } // powerDown()
 
@@ -873,26 +902,6 @@ public class Power {
 
 
     ////////////////////////////////////////////////////////////////
-    // requestOSUpdate()
-    //  sends the global broadcast to request another application to check+update the OS,
-    ////////////////////////////////////////////////////////////////
-    public void requestOSUpdate() {
-
-       // Do not send the broadcast, as it is currently handled by redbend client
-       // and we don't know about any ill effects of the command being called from two places.
-
-        if (service.SHOULD_BROADCAST_REDBEND_ON_HEARTBEAT) {
-            Log.i(TAG, "Broadcasting SwmClient.CHECK_FOR_UPDATES_NOW for OS updates");
-
-            Intent intent = new Intent();
-            intent.setAction("SwmClient.CHECK_FOR_UPDATES_NOW");
-            service.context.sendBroadcast(intent);
-        }
-
-    } // requestOSupdate()
-
-
-    ////////////////////////////////////////////////////////////////
     // checkAdjustTime: checks if we should set and adjust the wall clock
     //      will adjust if the old dates is obviously wrong and look like they have never been set
     ////////////////////////////////////////////////////////////////
@@ -915,6 +924,153 @@ public class Power {
         }
 
     } // setWallClock()
+
+
+
+    ///////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////
+    // Stuff related to requesting FOTA updates
+    ///////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////
+
+    static final int FOTA_UPDATE_CHECK_MS = 5000; // check every 5 seconds during window
+    Handler mainHandler = null;
+
+    ////////////////////////////////////////////////////////////////
+    // openFOTAUpdateWindow()
+    //  opens the window during which we will check for FOTA updates if we have data coverage
+    ////////////////////////////////////////////////////////////////
+    public void openFOTAUpdateWindow(int seconds) {
+
+        // We should wait up to 30 minutes for cell coverage
+        // Send a redbend update request if coverage is attained in that time-period
+
+        if (service.SHOULD_BROADCAST_REDBEND_ON_HEARTBEAT) {
+            Log.i(TAG, "FOTA update window opened");
+
+            if (mainHandler != null) {
+                // Set the timeout for how long we are allowed to check for updates
+                mainHandler.removeCallbacks(expireFOTAWindowTask);
+                mainHandler.postDelayed(expireFOTAWindowTask, seconds * 1000); // convert to ms
+
+                // start checking for updates
+                mainHandler.removeCallbacks(requestFOTATask);
+                mainHandler.postDelayed(requestFOTATask, FOTA_UPDATE_CHECK_MS);
+            } // main Handler exists;
+        }
+
+    } // openFOTAUpdateWindow()
+
+
+    ///////////////////////////////////////////////////////////////
+    // closeFOTAUpdateWindow()
+    //  closes the window
+    ///////////////////////////////////////////////////////////////
+    public void closeFOTAUpdateWindow() {
+        if (service.SHOULD_BROADCAST_REDBEND_ON_HEARTBEAT) {
+            if (mainHandler != null) {
+                mainHandler.removeCallbacks(expireFOTAWindowTask);
+                mainHandler.removeCallbacks(requestFOTATask);
+            }
+            Log.i(TAG, "FOTA update window closed");
+        }
+    } // closeFOTAUpdateWindow()
+
+    ///////////////////////////////////////////////////////////////
+    // requestFOTAUpdateNow()
+    //  Sends the actual request for FOTA to redbend
+    ///////////////////////////////////////////////////////////////
+    private void requestFOTAUpdateNow() {
+        Log.i(TAG, "Broadcasting SwmClient.CHECK_FOR_UPDATES_NOW for FOTA updates");
+
+        Intent intent = new Intent();
+        intent.setAction("SwmClient.CHECK_FOR_UPDATES_NOW");
+        service.context.sendBroadcast(intent);
+    } // requestFOTAUpdateNow()
+
+
+    ///////////////////////////////////////////////////////////////
+    // requestFOTATask()
+    //  Timer that is active during the time period we are allowed to wait for coverage to request a FOTA
+    //      once this expires, then we no longer check for FOTAs until next heartbeat
+    ///////////////////////////////////////////////////////////////
+    private Runnable requestFOTATask = new Runnable() {
+
+        @Override
+        public void run() {
+            try {
+                //Log.vv(TAG, "requestFOTATask()");
+
+                NetworkInfo network = service.ota.isDataNetworkConnected();
+                if (network == null) {
+                    // no acceptable data network, just check again later
+                    mainHandler.postDelayed(requestFOTATask, FOTA_UPDATE_CHECK_MS);
+                } else {
+                    requestFOTAUpdateNow();
+                    closeFOTAUpdateWindow(); // we've served our purpose, close the window now.
+                }
+            } catch(Exception e) {
+                Log.e(TAG + ".requestFOTATask", "Exception: " + e.toString(), e);
+
+            }
+        }
+    };
+
+
+    ///////////////////////////////////////////////////////////////
+    // expireFOTAWindowTask()
+    //  Timer that is active during the time period we are allowed to wait for coverage to request a FOTA
+    //      once this expires, then we no longer check for FOTAs until next heartbeat
+    ///////////////////////////////////////////////////////////////
+    private Runnable expireFOTAWindowTask = new Runnable() {
+
+        @Override
+        public void run() {
+            try {
+                Log.d(TAG, "expireFOTAWindowTask()");
+
+                // Stop checking for Fotas
+                closeFOTAUpdateWindow(); // we've served our purpose, close the window now.
+
+                //Log.vv(TAG, "expireFOTAWindowTask() END");
+            } catch(Exception e) {
+                Log.e(TAG + ".expireFOTAWindowTask", "Exception: " + e.toString(), e);
+
+            }
+        }
+    };
+
+
+
+
+    ///////////////////////////////////////////////////////////////
+    // redbendReceiver: receives notifications from the redbend FOTA engine
+    ///////////////////////////////////////////////////////////////
+    private BroadcastReceiver redbendReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(final Context context, final Intent intent) {
+
+            try {
+                // Log.v(TAG, "redbendReceiver()");
+                String action = intent.getAction();
+
+
+                // "SwmClient.NEW_UPDATE_AVAILABLE"
+                // "SwmClient.DMA UPDATE_FINISHED""
+                // "SwmClient.UPDATE_FINISHED_FAILED"
+
+                // Just log that the broadcast was received
+
+                Log.d(TAG, "Received Redbend Broadcast " + action);
+
+                // Do Nothing
+
+            } catch(Exception e) {
+                Log.e(TAG + ".redbendReceiver", "Exception: " + e.toString(), e);
+            }
+        } // OnReceive()
+    }; // redbendReceiver
+
 
 } // class
 

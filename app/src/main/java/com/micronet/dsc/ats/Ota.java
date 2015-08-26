@@ -355,6 +355,32 @@ public class Ota {
     }
 
 
+    ////////////////////////////////////////////////////////
+    // isDataNetworkConnected()
+    //  checks if we have a current connection to an acceptable data network
+    //  returns either NULL or the current network connection
+    ////////////////////////////////////////////////////////
+    public NetworkInfo isDataNetworkConnected() {
+        Log.vv(TAG, "isDataNetworkConnected()");
+        final ConnectivityManager connMgr = (ConnectivityManager)
+                service.context.getSystemService(Context.CONNECTIVITY_SERVICE);
+
+        final NetworkInfo active = connMgr.getActiveNetworkInfo();
+
+        if (active == null) return null; // no active network
+        if (!active.isConnected()) return null; // network is not connected, cannot make an attempt
+
+
+        int noncellularok = service.config.readParameterInt(Config.SETTING_COMMUNICATION, Config.PARAMETER_COMMUNICATION_NONCELLULAR_OK);
+        if (noncellularok == 0) {
+            // require mobile network (for security)
+            if (active.getType() != ConnectivityManager.TYPE_MOBILE)
+                return null; // only allow the mobile network (no wi-fi, etc)
+        }
+        return active;
+    } // isDataNetworkConnected()
+
+
 
     ////////////////////////////////////////////////////////
     // attemptSendMessage()
@@ -367,23 +393,8 @@ public class Ota {
 
         if (isInBackoff()) return false;    // in a back-off period, cannot make an attempt yet
 
-
-        final ConnectivityManager connMgr = (ConnectivityManager)
-                service.context.getSystemService(Context.CONNECTIVITY_SERVICE);
-
-        final NetworkInfo active =  connMgr.getActiveNetworkInfo();
-
-        if (active == null) return false; // no active network
-        if (!active.isConnected()) return false; // network is not connected, cannot make an attempt
-
-
-        int noncellularok = service.config.readParameterInt(Config.SETTING_COMMUNICATION, Config.PARAMETER_COMMUNICATION_NONCELLULAR_OK);
-        if (noncellularok == 0) {
-            // require mobile network (for security)
-            if (active.getType() != ConnectivityManager.TYPE_MOBILE) return false; // only allow the mobile network (no wi-fi, etc)
-        }
-
-
+        NetworkInfo active = isDataNetworkConnected();
+        if (active == null) return false; // we have no connection to an acceptable data network
 
         // TODO: signal strength check ?
         //   A: don't do this for now as the platform has problems reporting the correct signal strength (Apr2014)
