@@ -131,6 +131,40 @@ public class MainService extends Service {
     } // initializeObjects()
 
 
+    ///////////////////////////////////////////////////////////////////
+    // checkRecentAlarms()
+    //  checks whether any recent heartbeats or scheduled wake-ups occurred
+    //  this needs to be done after boot, since we may not receive the alarm notification
+    ///////////////////////////////////////////////////////////////////
+    public void checkRecentAlarms() {
+        // check to see if this could have been caused by a heartbeat
+        // if it could have been caused by heartbeat, then send the heartbeat alarm.
+
+        Log.v(TAG, "checkRecentAlarms()");
+
+        if (power.wasCurrentAlarmRecent(Power.ALARM_HEARTBEAT_NAME)) {
+
+            Log.i(TAG, "  Last scheduled heartbeat was recent, assuming this caused boot.");
+            // this was started by an alarm, we want to acquire a lock and trigger an event
+
+            int keepawake_sec = config.readParameterInt(Config.SETTING_HEARTBEAT, Config.PARAMETER_HEARTBEAT_KEEPAWAKE);
+            power.setHeartbeatWakeLock(keepawake_sec);
+
+            addEvent(QueueItem.EVENT_TYPE_HEARTBEAT);
+
+            power.openFOTAUpdateWindow(keepawake_sec);
+        }
+        if (power.wasCurrentAlarmRecent(Power.ALARM_SCHEDULED_NAME)) {
+
+            Log.i(TAG, "  Last scheduled wakeup was recent, assuming this caused boot.");
+            // this was started by an alarm, we want to acquire a lock and trigger an event
+
+
+            int keepawake_sec = config.readParameterInt(Config.SETTING_SCHEDULED_WAKEUP, Config.PARAMETER_SCHEDULED_WAKEUP_KEEPAWAKE);
+            power.setScheduledWakeLock(keepawake_sec);
+
+        }
+    } // checkRecentAlarms()
 
     @Override
     public void onCreate() {
@@ -187,6 +221,8 @@ public class MainService extends Service {
         Log.v(TAG, "OnStartCommand() " + (intent == null ? "" : intent.toString()));
 
 
+        boolean skipSetup = false; // default is to reset alarms, foregroundness, etc..
+
         // we will send a message when we are booted up, and a resume message if we are not already running
 
 
@@ -196,6 +232,7 @@ public class MainService extends Service {
             final int boot_id = intent.getIntExtra(Power.BOOT_REQUEST_NAME, 0);
             final int shutdown_id = intent.getIntExtra(Power.SHUTDOWN_REQUEST_NAME, 0);
             final int restart_id = intent.getIntExtra(Power.ALARM_RESTART_NAME, 0);
+            final int external_id = intent.getIntExtra(ExternalReceiver.EXTERNAL_BROADCAST_PING, 0);
 
             if (heartbeat_id == 1) {
                 // this was started by a heartbeat alarm, we want to acquire a lock and trigger an event
@@ -257,28 +294,7 @@ public class MainService extends Service {
 
                 // check to see if this could have been caused by a heartbeat
                 // if it could have been caused by heartbeat, then send the heartbeat alarm.
-                if (power.wasCurrentAlarmRecent(Power.ALARM_HEARTBEAT_NAME)) {
-
-                    Log.i(TAG, "  Last scheduled heartbeat was recent, assuming this caused boot.");
-                    // this was started by an alarm, we want to acquire a lock and trigger an event
-
-                    int keepawake_sec = config.readParameterInt(Config.SETTING_HEARTBEAT, Config.PARAMETER_HEARTBEAT_KEEPAWAKE);
-                    power.setHeartbeatWakeLock(keepawake_sec);
-
-                    addEvent(QueueItem.EVENT_TYPE_HEARTBEAT);
-
-                    power.openFOTAUpdateWindow(keepawake_sec);
-                }
-                if (power.wasCurrentAlarmRecent(Power.ALARM_SCHEDULED_NAME)) {
-
-                    Log.i(TAG, "  Last scheduled wakeup was recent, assuming this caused boot.");
-                    // this was started by an alarm, we want to acquire a lock and trigger an event
-
-
-                    int keepawake_sec = config.readParameterInt(Config.SETTING_SCHEDULED_WAKEUP, Config.PARAMETER_SCHEDULED_WAKEUP_KEEPAWAKE);
-                    power.setScheduledWakeLock(keepawake_sec);
-
-                }
+                checkRecentAlarms(); // we need to check for recent alarms if we just booted
 
             } else if (shutdown_id == 1) {
                 Log.i(TAG, " (Started From System Shutdown)");
@@ -288,8 +304,18 @@ public class MainService extends Service {
 
             } else if (restart_id == 1) {
                 Log.i(TAG, " (Started From Process Killer)");
+            } else if (external_id == 1) {
+                // This can happen frequently, so don't spend time reseting alarms or foreground, etc unless needed
+                skipSetup = true;
+                if (!isAlreadyRunning) { // don't clutter logs up
+                    Log.v(TAG, " (Started From Externa)");
+                }
             } else {
                 Log.i(TAG, " (Started From Other/Unknown Intent)");
+                // The service was started by another app (kiosk) or user
+                // we need to check for recent alarms, because we may have booted which then caused another app to start us.
+                checkRecentAlarms(); // we need to check for recent alarms
+
             }
 
 
@@ -300,7 +326,8 @@ public class MainService extends Service {
             // first time starting after loading
             clearEventSequenceIdIfNeeded();
             addEvent(QueueItem.EVENT_TYPE_RESTART); // service restarted
-            isAlreadyRunning = true; // yes we are already running
+            isAlreadyRunning = true; // remember for next time we are already running
+            skipSetup = false; // if we weren't running we def need to do all setup
         }
 
 
@@ -315,11 +342,13 @@ public class MainService extends Service {
         lastRunningElapsedTime = SystemClock.elapsedRealtime(); // we know we were running at this time
 
 
-        // Always makes sure all alarm is set appropriately
-        power.setNextAlarm(Power.ALARM_HEARTBEAT_NAME);
-        power.setNextAlarm(Power.ALARM_SCHEDULED_NAME);
+        // Always makes sure all alarm is set appropriately, unless this is just a ping and we were already running
+        if (!skipSetup) {
+            power.setNextAlarm(Power.ALARM_HEARTBEAT_NAME);
+            power.setNextAlarm(Power.ALARM_SCHEDULED_NAME);
 
-        setForeground();
+            setForeground();
+        }
         try {
             AlarmReceiver.completeWakefulIntent(intent);
         } catch (Exception e) {

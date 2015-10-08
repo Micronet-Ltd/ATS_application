@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SET_TIME" />
     <uses-permission android:name="android.permission.REBOOT" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
 
     <application
         android:allowBackup="true"
@@ -45,12 +46,23 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".ExternalReceiver"
+            android:enabled="true"
+            >
+            <intent-filter>
+                <action android:name="com.micronet.dsc.ats.ping"/>
+            </intent-filter>
+        </receiver>
+
+
         <!-- Start the Service if applicable on boot -->
+        <!--
         <receiver android:name=".BootReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
+        -->
 
         <!-- Stop the service if applicable on shutdown -->
         <receiver android:name=".ShutdownReceiver">

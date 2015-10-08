@@ -276,44 +276,44 @@ public class IoTest  extends AndroidTestCase {
 
         // no matter how long we are physically inactive, we are never logically active
         for (i= 1; i < ticksPerTenth(T50); i++) {
-            assertFalse(io.checkDigitalInput(1, false));
+            assertFalse(io.checkDigitalInput(1, 0));
         }
 
         assertNull(service.queue.getFirstItem());
 
 
         // OK, lets turn Input 1 physically active
-        assertFalse(io.checkDigitalInput(1, true));
+        assertFalse(io.checkDigitalInput(1, 1));
         assertNull(service.queue.getFirstItem());
 
         // and again -> In1 On
-        assertTrue(io.checkDigitalInput(1, true));
+        assertTrue(io.checkDigitalInput(1, 1));
         assertEquals(QueueItem.EVENT_TYPE_INPUT1_ON, service.queue.getFirstItem().event_type_id);
         service.queue.clearAll();
 
         // continued physical on has no effect
         for (i= 1; i < ticksPerTenth(T20); i++) {
-            assertTrue(io.checkDigitalInput(1, true));
+            assertTrue(io.checkDigitalInput(1, 1));
         }
         assertNull(service.queue.getFirstItem());
 
         // And turn Input 1 physical inactive
-        assertTrue(io.checkDigitalInput(1, false));
+        assertTrue(io.checkDigitalInput(1, 0));
         assertNull(service.queue.getFirstItem());
 
         // And again -- > In1 Off
-        assertFalse(io.checkDigitalInput(1, false));
+        assertFalse(io.checkDigitalInput(1, 0));
         assertEquals(QueueItem.EVENT_TYPE_INPUT1_OFF, service.queue.getFirstItem().event_type_id);
         service.queue.clearAll();
 
         // now check for just shy of reset period
         for (i= 1; i < ticksPerTenth(T50); i++) {
-            assertFalse(io.checkDigitalInput(1, false));
+            assertFalse(io.checkDigitalInput(1, 0));
         }
 
         // followed by lots of time on
         for (i= 1; i < ticksPerTenth(T20); i++) {
-            assertFalse(io.checkDigitalInput(1, true));
+            assertFalse(io.checkDigitalInput(1, 1));
         }
 
         assertNull(service.queue.getFirstItem());
@@ -321,13 +321,13 @@ public class IoTest  extends AndroidTestCase {
         // now the reset period off
         // now check for full reset period
         for (i= 1; i <= ticksPerTenth(T50); i++) {
-            assertFalse(io.checkDigitalInput(1, false));
+            assertFalse(io.checkDigitalInput(1, 0));
         }
 
         // followed by trigger time on
-        assertFalse(io.checkDigitalInput(1, true));
+        assertFalse(io.checkDigitalInput(1, 1));
         assertNull(service.queue.getFirstItem());
-        assertTrue(io.checkDigitalInput(1, true));
+        assertTrue(io.checkDigitalInput(1, 1));
         assertEquals(QueueItem.EVENT_TYPE_INPUT1_ON, service.queue.getFirstItem().event_type_id);
 
 
@@ -385,10 +385,10 @@ public class IoTest  extends AndroidTestCase {
 
 
 
-        //Config Parameters: bias, 1/10 seconds on, 1/10 seconds reset delay, seconds awake, messages
+        //Config Parameters: bias, 1/10 seconds on, 1/10 seconds reset delay, seconds awake, messages,default debounce off
         service.config.writeSetting(Config.SETTING_INPUT_GP1, "1|" + T10 + "|" + T30 + "|10|3");
         service.config.writeSetting(Config.SETTING_INPUT_GP3, "0|" + T15 + "|" + T25 + "|0|2");
-        service.config.writeSetting(Config.SETTING_INPUT_GP6, "1|" + T20 + "|" + T0 + "|10|1");
+        service.config.writeSetting(Config.SETTING_INPUT_GP5, "1|" + T20 + "|" + T0 + "|10|1");
 
 
         assertFalse((io.savedIo.input_bitfield & ~Io.INPUT_BITVALUE_IGNITION) != 0);
@@ -398,17 +398,18 @@ public class IoTest  extends AndroidTestCase {
 
         // no matter how long we are physically inactive, we are never logically active
         for (i = 1; i < T30; i++) {
-            assertFalse(io.checkDigitalInput(1, false));
-            assertFalse(io.checkDigitalInput(3, true)); // this one is set to be active-low;
-            assertFalse(io.checkDigitalInput(6, false));
+            assertFalse(io.checkDigitalInput(1, 0));
+            assertFalse(io.checkDigitalInput(3, 1)); // this one is set to be active-low;
+            assertFalse(io.checkDigitalInput(5, 0));
+            assertFalse(io.checkDigitalInput(6, 0));
         }
 
         assertNull(service.queue.getFirstItem());
 
         // OK, we are going to start changing physical input levels and check the expected logical results
         //
-        // use these pulse diagrams (500ms per tick): 0 = physical low, 1 =  physical high
-        //  N = Logically , F = Logically Off, R = Input is Reset
+        // use these pulse diagrams (500ms per tick): 0 = physical low, 1 =  physical high, -1 is float
+        //  N = Logically On, F = Logically Off, R = Input is Reset
         // 0 = is off, 1 = is on
 
         int[] physicalInput1 = { 0,0,1,1,1,1,1,0,0,0,1,1,1,0,0,0,0,0,0,0,1,1 };
@@ -419,29 +420,164 @@ public class IoTest  extends AndroidTestCase {
         // Logical State:      F     N     F                       R     N
         int[] resultInput3=    { 0,0,N,1,1,F,0,0,0,0,0,0,0,0,0,0,0,0,0,0,N,1 };
 
-        int[] physicalInput6 = { 0,0,1,1,1,1,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1 };
+        int[] physicalInput5 = { 0,0,1,1,1,1,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1 };
         // Logical State:      F           N       FR      N
-        int[] resultInput6=    { 0,0,0,0,0,N,1,1,1,F,0,0,0,N,1,1,1,1,1,1,1,1 };
+        int[] resultInput5=    { 0,0,0,0,0,N,1,1,1,F,0,0,0,N,1,1,1,1,1,1,1,1 };
 
-        boolean input1R, input3R, input6R;
+        boolean input1R, input3R, input5R;
         for (i=0 ; i < physicalInput1.length; i++) {
 
             service.queue.clearAll();
 
-            input1R = io.checkDigitalInput(1, (physicalInput1[i] == 1));
-            input3R = io.checkDigitalInput(3, (physicalInput3[i] == 1));
-            input6R = io.checkDigitalInput(6, (physicalInput6[i] == 1));
+            input1R = io.checkDigitalInput(1, (physicalInput1[i]));
+            input3R = io.checkDigitalInput(3, (physicalInput3[i]));
+            input5R = io.checkDigitalInput(5, (physicalInput5[i]));
 
             assertTrue("iter=" + i, verifyPulseResult(resultInput1[i], input1R, QueueItem.EVENT_TYPE_INPUT1_ON, QueueItem.EVENT_TYPE_INPUT1_OFF, true, true));
             assertTrue("iter=" + i, verifyPulseResult(resultInput3[i], input3R, QueueItem.EVENT_TYPE_INPUT3_ON, QueueItem.EVENT_TYPE_INPUT3_OFF, false, true));
-            assertTrue("iter=" + i, verifyPulseResult(resultInput6[i], input6R, QueueItem.EVENT_TYPE_INPUT6_ON, QueueItem.EVENT_TYPE_INPUT6_OFF, true, false));
+            assertTrue("iter=" + i, verifyPulseResult(resultInput5[i], input5R, QueueItem.EVENT_TYPE_INPUT5_ON, QueueItem.EVENT_TYPE_INPUT5_OFF, true, false));
 
 
         } // each pulse
 
 
-
     } // test_checkDigitalInput_Multiple()
+
+
+    public void test_checkDigitalInput_PulsedInput() {
+
+        // test with a pulsing input where the debounce-on is less than the debounce-off
+
+        final int T0 = 0 *  io.INPUT_POLL_PERIOD_TENTHS;
+        final int T10 = 2 * io.INPUT_POLL_PERIOD_TENTHS;
+        final int T15 = 3 *  io.INPUT_POLL_PERIOD_TENTHS;
+        final int T20 = 4 *  io.INPUT_POLL_PERIOD_TENTHS;
+        final int T25 = 5 *  io.INPUT_POLL_PERIOD_TENTHS;
+        final int T30 = 6 * io.INPUT_POLL_PERIOD_TENTHS;
+
+
+
+        //Config Parameters: bias, 1/10 seconds on, 1/10 seconds reset delay, seconds awake, messages
+        service.config.writeSetting(Config.SETTING_INPUT_GP1, "1|" + T10 + "|" + T30 + "|10|3|" + T20);
+        service.config.writeSetting(Config.SETTING_INPUT_GP6, "1|" + T10 + "|" + T30 + "|10|3|" + T20);
+
+
+
+        assertFalse((io.savedIo.input_bitfield & ~Io.INPUT_BITVALUE_IGNITION) != 0);
+        service.queue.clearAll();
+
+        int i;
+
+        // no matter how long we are physically inactive, we are never logically active
+        for (i = 1; i < T30; i++) {
+            assertFalse(io.checkDigitalInput(1, 0));
+        }
+
+        assertNull(service.queue.getFirstItem());
+
+        // OK, we are going to start changing physical input levels and check the expected logical results
+        //
+        // use these pulse diagrams (500ms per tick): 0 = physical low, 1 =  physical high, -1 is float
+        //  N = Logically On , F = Logically Off, R = Input is Reset
+        // 0 = is off, 1 = is on
+
+        int[] physicalInput1 = { 0,0,1,0,1,1,0,0,1,1,0,0,1,1,0,0,0,0,0,1,1,0 };
+        // Logical State:      F       N                           FR
+        int[] resultInput1=    { 0,0,0,0,0,N,1,1,1,1,1,1,1,1,1,1,1,F,0,0,0,0 };
+
+        int[] physicalInput6 = { 0,0,1,0,1,1,0,0,1,1,0,0,1,1,0,0,0,0,0,1,1,0 };
+        // Logical State:      F       N                           FR
+        int[] resultInput6=    { 0,0,0,0,0,N,1,1,1,1,1,1,1,1,1,1,1,F,0,0,0,0 };
+
+
+        boolean input1R, input6R;
+        for (i=0 ; i < physicalInput1.length; i++) {
+
+            service.queue.clearAll();
+            input1R = io.checkDigitalInput(1, (physicalInput1[i]));
+            input6R = io.checkDigitalInput(6, (physicalInput6[i]));
+
+            assertTrue("iter=" + i, verifyPulseResult(resultInput1[i], input1R, QueueItem.EVENT_TYPE_INPUT1_ON, QueueItem.EVENT_TYPE_INPUT1_OFF, true, true));
+            assertTrue("iter=" + i, verifyPulseResult(resultInput6[i], input6R, QueueItem.EVENT_TYPE_INPUT6_ON, QueueItem.EVENT_TYPE_INPUT6_OFF, true, true));
+
+
+
+        } // each pulse
+
+
+    } // test_checkDigitalInput_PulsedInput()
+
+
+
+    public void test_checkDigitalInput_Bias() {
+
+        // test the bias (float-detection) of inputs
+
+        final int T0 = 0 *  io.INPUT_POLL_PERIOD_TENTHS;
+        final int T10 = 2 * io.INPUT_POLL_PERIOD_TENTHS;
+        final int T15 = 3 *  io.INPUT_POLL_PERIOD_TENTHS;
+        final int T20 = 4 *  io.INPUT_POLL_PERIOD_TENTHS;
+        final int T25 = 5 *  io.INPUT_POLL_PERIOD_TENTHS;
+        final int T30 = 6 * io.INPUT_POLL_PERIOD_TENTHS;
+
+
+        //Config Parameters: bias, 1/10 seconds on, 1/10 seconds reset delay, seconds awake, messages
+        service.config.writeSetting(Config.SETTING_INPUT_GP4, "1|" + T10 + "|" + T30 + "|10|3"); // Float is same as ground
+        service.config.writeSetting(Config.SETTING_INPUT_GP5, "0|" + T10 + "|" + T30 + "|10|3"); // Float is same as high
+        service.config.writeSetting(Config.SETTING_INPUT_GP6, "0|" + T10 + "|" + T30 + "|10|3"); // Float is same as high
+
+        assertFalse((io.savedIo.input_bitfield & ~Io.INPUT_BITVALUE_IGNITION) != 0);
+        service.queue.clearAll();
+
+        int i;
+
+        // no matter how long we are physically inactive, we are never logically active
+        for (i = 1; i < T30; i++) {
+            assertFalse(io.checkDigitalInput(4, 0));
+            assertFalse(io.checkDigitalInput(5, 1));
+            assertFalse(io.checkDigitalInput(6, 1));
+        }
+
+        assertNull(service.queue.getFirstItem());
+
+        // OK, we are going to start changing physical input levels and check the expected logical results
+        //
+        // use these pulse diagrams (500ms per tick): 0 = physical low, 1 =  physical high, 2 is float
+        //  N = Logically On, F = Logically Off, R = Input is Reset
+        // 0 = is off, 1 = is on
+
+        int[] physicalInput4 = { 0,0,1,1,1,1,1,2,2,0,1,1,1,0,0,2,0,0,2,2,1,1 };
+        // Logical State:      F       N         F                   R     N
+        int[] resultInput4=    { 0,0,0,N,1,1,1,1,F,0,0,0,0,0,0,0,0,0,0,0,0,N };
+
+        int[] physicalInput5 = { 1,0,0,1,2,1,1,2,1,2,2,0,0,0,2,2,2,1,0,0,2,2 }; // remember this is set as active-low
+        // Logical State:      F     N   F             R N                R
+        int[] resultInput5=    { 0,0,N,1,F,0,0,0,0,0,0,0,N,1,1,F,0,0,0,0,0,0 };
+
+        int[] physicalInput6 = { 1,0,0,1,2,1,1,2,1,2,2,0,0,0,2,2,2,1,0,0,2,2 }; // remember this is set as active-low
+        // Logical State:      F     N   F             R N                R
+        int[] resultInput6=    { 0,0,N,1,F,0,0,0,0,0,0,0,N,1,1,F,0,0,0,0,0,0 };
+
+        boolean input4R, input5R, input6R;
+        for (i=0 ; i < physicalInput4.length; i++) {
+
+            service.queue.clearAll();
+
+            input4R = io.checkDigitalInput(4, (physicalInput4[i] == 2 ? Io.HW_INPUT_FLOAT : physicalInput4[i]));
+            input5R = io.checkDigitalInput(5, (physicalInput5[i] == 2 ? Io.HW_INPUT_FLOAT : physicalInput5[i]));
+            input6R = io.checkDigitalInput(6, (physicalInput6[i] == 2 ? Io.HW_INPUT_FLOAT : physicalInput6[i]));
+
+
+            assertTrue("iter=" + i, verifyPulseResult(resultInput4[i], input4R, QueueItem.EVENT_TYPE_INPUT4_ON, QueueItem.EVENT_TYPE_INPUT4_OFF, true, true));
+            assertTrue("iter=" + i, verifyPulseResult(resultInput5[i], input5R, QueueItem.EVENT_TYPE_INPUT5_ON, QueueItem.EVENT_TYPE_INPUT5_OFF, true, true));
+            assertTrue("iter=" + i, verifyPulseResult(resultInput6[i], input6R, QueueItem.EVENT_TYPE_INPUT6_ON, QueueItem.EVENT_TYPE_INPUT6_OFF, true, true));
+
+
+        } // each pulse
+
+
+    } // test_checkDigitalInput_Bias()
+
 
 
     public void test_setEngineStatus() {

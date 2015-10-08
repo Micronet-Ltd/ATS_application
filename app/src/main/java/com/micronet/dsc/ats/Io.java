@@ -16,6 +16,10 @@ import android.hardware.SensorManager;
 import android.os.PowerManager;
 import android.os.SystemClock;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.util.Arrays;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -37,9 +41,25 @@ public class Io {
     public static final int MAX_GP_INPUTS_SUPPORTED = 6; // used in arrays
     public static final int INPUT_BITVALUE_IGNITION = 1; // the bit value in the inputs_bitfield of the ignition bit
     // gp Inputs are hardcoded to = 1 << input number (e.g. Input#2 = 1 << 2 = value of 4)
-    public static final int INPUT_POLL_PERIOD_TENTHS = 8; // poll period in tenths of a second, runs the timer that polls the hardware API
+    public static final int INPUT_POLL_PERIOD_TENTHS = 4; // poll period in tenths of a second, runs the timer that polls the hardware API
 
     public static final String DEFAULT_SERIAL_NUMBER = "00000000"; // used if we can't determine the serial number of device
+
+
+    // Possible I/O schemes. Older pcbs use a digital scheme, newer pcbs (v 4+) use an analog scheme
+    public static final int IO_SCHEME_97 = 1; // all digital input, TYPE_INPUT1 is ignition
+    public static final int IO_SCHEME_A = 2;  // all digital inputs, TYPE_11 (input 6) is ignition
+    public static final int IO_SCHEME_6 = 3;  // 3 digital, 3 analog inputs, TYPE_8 is ignition
+
+    // set the default value for the I/O scheme
+    static int IO_SCHEME_DEFAULT = IO_SCHEME_6 ;
+
+    // determine values for reading digital lows and highs on analog lines (anything in between is a float)
+    private static final int ANALOG_THRESHOLD_LOW_MV = 1000; // anything below 1 volt is low
+    private static final int ANALOG_THRESHOLD_HIGH_MV = 5000; // anything above 5 volt is high
+
+
+    static final int HW_INPUT_FLOAT = -1; // for ints: 0 will me low, 1 will me high and this will mean float
 
 
     public static boolean DEFAULT_ALWAYS_OVERRIDE = false; // always use the defaults and ignore the actual hardware states
@@ -53,6 +73,13 @@ public class Io {
 
     public static double DEFAULT_BATTERY_VOLTS = 13.4; // default state if hardware API not connected (can be changed from activity)
 
+
+
+
+
+
+
+    private static int io_scheme = IO_SCHEME_DEFAULT; // this is the current IO scheme
 
     private static boolean USE_INPUT6_AS_IGNITION = false; // are we currently using input6 as the ignition line?
 
@@ -99,10 +126,12 @@ public class Io {
     PowerManager.WakeLock[] gpInputWakelocks = new PowerManager.WakeLock[MAX_GP_INPUTS_SUPPORTED];
 
 
+    /*
     //////////////////////////////////////////
     // Items to manage sensor events (currently disabled)
     volatile static HardwareInputResults sensorInputResults = new HardwareInputResults();
     SensorTask sensorTask;
+    */
 
     //////////////////////////////////////////
     // Construct Io()
@@ -343,6 +372,77 @@ public class Io {
         return deviceConstants.deviceBootCapturedInputs;
     }
 
+    //////////////////////////////////////////////////////////
+    // getHardwareIoScheme()
+    //  decides which I/O scheme to use for reading inputs.
+    //  earlier pcbs used a digital scheme, later pcbs use an analog scheme to allow float-defaults
+    //////////////////////////////////////////////////////////
+    public static int getHardwareIoScheme() {
+
+        // manu parameters are in cat sys/module/device/parameters/mnfrparams
+
+        // Two possible results, contains:
+        //  <M317-A019-001> (old digital scheme)
+        //  <M317-A033-001> (new analog scheme)
+
+        String mnfrparams = "";
+
+
+
+        try {
+
+            File file = new File("/sys/module/device/parameters/mnfrparams");
+            InputStream in = new FileInputStream(file);
+            byte[] re = new byte[1000];
+            int read = 0;
+            while ( (read = in.read(re, 0, 1000)) != -1) {
+                String string = new String(re, 0, read);
+                mnfrparams += string;
+            }
+            in.close();
+        } catch (Exception e) {
+            Log.e(TAG, "Exception reading mnfrparams file to set IO scheme. Using default ");
+            return IO_SCHEME_DEFAULT;
+        }
+        Log.d(TAG, "Manufacturer parameters = " + mnfrparams);
+
+        // How to determine IO scheme
+        //  1) find the parameter p04_27 in the string
+        //  2) get the value of the 19th character
+        //  3) Expect an "9", "7", "6", or "A" and assign to appropriate scheme
+
+        // Examples: mnfrparams string contains this parameter value (amongst others):
+        //  pcb v4: "p04_27<71AB06ZW4WD1CT200-66A730947>" : the 19th character is a 6
+        //  pcb v3: "p04_27<71AA06BW4WD1CQ200-A6A730947>" : the 19th character is an A
+
+        int parameter_start = mnfrparams.indexOf("p04_27<");
+        final int SCHEME_CHARACTER_OFFSET = 25;
+
+        if ((parameter_start < 0) || // -1 means our parameter was not found.
+            (parameter_start + SCHEME_CHARACTER_OFFSET >= mnfrparams.length())) {
+            Log.e(TAG, "Could not extract I/O scheme from manufacturer parameters, using default");
+            return IO_SCHEME_DEFAULT;
+        }
+
+        parameter_start += SCHEME_CHARACTER_OFFSET;
+
+        String scheme_character = mnfrparams.substring(parameter_start, parameter_start+1);
+
+        if ((scheme_character.equals("9")) || (scheme_character.equals("7"))) {
+            Log.i(TAG, "Recognized IO Scheme 97");
+            return IO_SCHEME_97;
+        } else if (scheme_character.equals("A")) {
+            Log.i(TAG, "Recognized IO Scheme A");
+            return IO_SCHEME_A;
+        } else if (scheme_character.equals("6")) {
+            Log.i(TAG, "Recognized IO Scheme 6");
+            return IO_SCHEME_6;
+        } else {
+            Log.i(TAG, "Unrecognized IO Scheme: using default");
+            return IO_SCHEME_DEFAULT;
+        }
+
+    } // getHardwareIoScheme()
 
     //////////////////////////////////////////////////////////
     // getHardwareDeviceId()
@@ -364,6 +464,15 @@ public class Io {
         }
 
         Log.i(TAG, "Retrieved serial number " + serial);
+
+        /*
+        // set whether we are dealing with earlier I/O (digital) or later I/O (all analog) versions
+        if ((serial.length() == 6) && (serial.compareTo("709900") <= 0))
+            setIoScheme(IO_SCHEME_DIGITAL);
+        else
+            setIoScheme(IO_SCHEME_ANALOG);
+        */
+
         return serial;
 
     } // getHardwareDeviceId()
@@ -409,23 +518,24 @@ public class Io {
 
     public static class HardwareInputResults {
         boolean ignition_input, ignition_valid; // sometimes the ignition reading is unknown or invalid.
-        boolean input1, input2, input3, input4, input5, input6;
+        int input1, input2, input3, input4, input5, input6;
+        double voltage;
         long savedTime;
     }
 
 
     //////////////////////////////////////////////////////////
-    // getHardwareInputs()
+    // getAllHardwareInputs()
     //  Calls the hardware API
     //  This is called from timer to get the state of the hardware inputs
     // Returns HardwareInputResults (or null if not found)
     //////////////////////////////////////////////////////////
-    public static HardwareInputResults getHardwareInputs() {
+    public static HardwareInputResults getAllHardwareInputs() {
 
 
         long start_now = SystemClock.elapsedRealtime();
 
-        Log.v(TAG, "getHardwareInputs()");
+        Log.v(TAG, "getAllHardwareInputs()");
 
         HardwareInputResults hardwareInputResults = new HardwareInputResults();
 
@@ -448,23 +558,277 @@ public class Io {
 
             try {
 
-                // TYPE_INPUT2-4 in Hardware API is really INPUT1-3 on the cable, because in Hardware API
-                //  TYPE_INPUT1 is used for the ignition line.
-                // TYPE_INPUT9-11 in Hardware API is really INPUT4-6 on the cable, because of wakeup requirements
+                int inputVal;
 
-                // Note: If INPUT1, INPUT2, or INPUT3 is high, then IGNITION will also be read as high
-                //      regardless of its actual value.
-                //       INPUT4,5, and 6 are not affected by this.
+                /////////////////////////////
+                // Handle Analog inputs
+
+                if ((io_scheme == IO_SCHEME_A) || (io_scheme == IO_SCHEME_97)) {
+
+                    // These schemes have one analog value for the main voltage
+                    // cannot use getAllAnalogInput() -- it always returns null
+                    inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT1);
+                    if (inputVal == -1) {
+                        Log.w(TAG, "reading Analog1 returned error (-1), trying again");
+                        inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT1);
+                        if (inputVal == -1) {
+                            Log.e(TAG, "reading Analog1 returned error (-1) on retry, aborting read");
+                        }
+                    }
+                    if (inputVal != -1) {
+                        hardwareInputResults.voltage = inputVal / 1000.0; // convert to volts from mvolts
+                    }
+
+
+                } else if (io_scheme == IO_SCHEME_6) {
+                    // scheme 6 has three additional analog inputs in addition to the main voltage
+
+                    // Read Analog Type 1 (voltage), 5 (input 4), 6 (input 5), 7 (input 6)
+
+                    int[] allanalogs = null;
+                    allanalogs = hardware.getAllAnalogInput();
+
+                    if (allanalogs == null) {
+                        Log.e(TAG, "Could not read analog inputs; getAllAnalogInput() returns null");
+                    } else if (allanalogs.length < 1) { // should be at least 1 entries
+                        Log.e(TAG, "Could not read analog inputs; getAllAnalogInput() returns < 1 entry = " + Arrays.toString(allanalogs));
+                    } else {
+                        Log.v(TAG, " Analog results " + Arrays.toString(allanalogs));
+
+                        inputVal = allanalogs[0]; // This is the main analog voltage
+                        if (inputVal == -1) {
+                            Log.w(TAG, "reading Analog1 returned error (-1), trying again");
+                            inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT1);
+                            if (inputVal == -1) {
+                                Log.e(TAG, "reading Analog1 returned error (-1) on retry, aborting read");
+                            }
+                        }
+                        if (inputVal != -1) { // valid Input Value
+                            hardwareInputResults.voltage = inputVal / 1000.0; // convert to volts from mvolts
+                        }
+                        //hardwareVoltageResults.voltage = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT1) / 1000.0;
+
+                        // in the analog scheme, TYPE9, TYPE10, and TYPE11 are always read as analog and they can float
+                        inputVal = allanalogs[4];
+                        if (inputVal == -1) {
+                            Log.w(TAG, "reading Input4 (TYPE_ANALOG5) returned error (-1), trying again");
+                            inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT5);
+                            if (inputVal == -1) {
+                                Log.e(TAG, "reading Input4 (TYPE_ANALOG5) returned error (-1) on retry, aborting read");
+                            }
+                        }
+                        if (inputVal != -1) {
+                            // we got a value
+                            if (inputVal < ANALOG_THRESHOLD_LOW_MV) hardwareInputResults.input4 = 0;
+                            else if (inputVal > ANALOG_THRESHOLD_HIGH_MV)
+                                hardwareInputResults.input4 = 1;
+                            else {
+                                hardwareInputResults.input4 = HW_INPUT_FLOAT;
+                            }
+                        }
+
+                        inputVal = allanalogs[5];
+                        if (inputVal == -1) {
+                            Log.w(TAG, "reading Input5 (TYPE_ANALOG6) returned error (-1), trying again");
+                            inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT6);
+                            if (inputVal == -1) {
+                                Log.e(TAG, "reading Input5 (TYPE_ANALOG6) returned error (-1) on retry, aborting read");
+                            }
+                        }
+                        if (inputVal != -1) {
+                            // we got a value
+                            if (inputVal < ANALOG_THRESHOLD_LOW_MV) hardwareInputResults.input5 = 0;
+                            else if (inputVal > ANALOG_THRESHOLD_HIGH_MV)
+                                hardwareInputResults.input5 = 1;
+                            else {
+                                hardwareInputResults.input5 = HW_INPUT_FLOAT;
+                            }
+                        }
+
+                        inputVal = allanalogs[6];
+                        if (inputVal == -1) {
+                            Log.w(TAG, "reading Input6 (TYPE_ANALOG7) returned error (-1), trying again");
+                            inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT6);
+                            if (inputVal == -1) {
+                                Log.e(TAG, "reading Input6 (TYPE_ANALOG7) returned error (-1) on retry, aborting read");
+                            }
+                        }
+                        if (inputVal != -1) {
+                            // we got a value
+                            if (inputVal < ANALOG_THRESHOLD_LOW_MV) hardwareInputResults.input6 = 0;
+                            else if (inputVal > ANALOG_THRESHOLD_HIGH_MV)
+                                hardwareInputResults.input6 = 1;
+                            else {
+                                hardwareInputResults.input6 = HW_INPUT_FLOAT;
+                            }
+                        }
+
+
+                    } // analog inputs returned something
+                } // IO_SCHEME_6
+
+
+                /////////////////////////////
+                // Handle Digital inputs
+
+                // Read All Inputs at once
+                int[] alldigitals = null;
+                alldigitals = hardware.getAllPinInState();
+
+                if (alldigitals == null) {
+                    Log.e(TAG, "Could not read digital inputs; getAllPinInState() returns null");
+                }
+                else if (alldigitals.length < 11) { // should be at least 11 entries
+                    Log.e(TAG, "Could not read digital inputs;getAllPinInState() returns < 11 entries = " + Arrays.toString(alldigitals));
+                } else {
+                    Log.v(TAG, " Digital results " + Arrays.toString(alldigitals));
+
+                    // All boards have at least three digital inputs
+
+                    // Read Types 2 (input1), 3 (input 3), and 4 (input 3)
+
+                    inputVal = alldigitals[1]; // TYPE 2 is the 2nd item in array
+                    if (inputVal == -1) {
+                        Log.w(TAG, "reading Input1 (TYPE 2) returned error (-1), trying again");
+                        inputVal = hardware.getInputState(MicronetHardware.TYPE_INPUT2);
+                        if (inputVal == -1) {
+                            Log.e(TAG, "reading Input1 (TYPE 2) returned error (-1) on retry, aborting read");
+                        }
+                    }
+                    if (inputVal != -1) { // valid Input Value
+                        hardwareInputResults.input1 = (inputVal == 0 ? 0 : 1);
+                    } // valid Input Value
+
+                    inputVal = alldigitals[2];
+                    if (inputVal == -1) {
+                        Log.w(TAG, "reading Input2 (TYPE 3) returned error (-1), trying again");
+                        inputVal = hardware.getInputState(MicronetHardware.TYPE_INPUT3);
+                        if (inputVal == -1) {
+                            Log.e(TAG, "reading Input2 (TYPE 3) returned error (-1) on retry, aborting read");
+                        }
+                    }
+                    if (inputVal != -1) { // valid Input Value
+                        hardwareInputResults.input2 = (inputVal == 0 ? 0 : 1);
+                    } // valid Input Value
+
+                    inputVal = alldigitals[3];
+                    if (inputVal == -1) {
+                        Log.w(TAG, "reading Input3 (TYPE 4) returned error (-1), trying again");
+                        inputVal = hardware.getInputState(MicronetHardware.TYPE_INPUT4);
+                        if (inputVal == -1) {
+                            Log.e(TAG, "reading Input3 (TYPE 4) returned error (-1) on retry, aborting read");
+                        }
+                    }
+                    if (inputVal != -1) { // valid Input Value
+                        hardwareInputResults.input3 = (inputVal == 0 ? 0 : 1);
+                    } // valid Input Value
+
+
+                    // Does the scheme include additional digital inputs ?
+
+                    if ((io_scheme == IO_SCHEME_97) || (io_scheme==IO_SCHEME_A)) { //scheme A or scheme 97
+                        // type  9 and  10 are read as digital inputs
+                        inputVal = alldigitals[8];
+                        if (inputVal == -1) {
+                            Log.w(TAG, "reading Input4 (TYPE 9) returned error (-1), trying again");
+                            inputVal = hardware.getInputState(MicronetHardware.TYPE_INPUT9);
+                            if (inputVal == -1) {
+                                Log.e(TAG, "reading Input4 (TYPE 9) returned error (-1) on retry, aborting read");
+                            }
+                        }
+                        if (inputVal != -1) { // valid Input Value
+                            hardwareInputResults.input4 = (inputVal == 0 ? 0 : 1);
+                        } // valid Input Value
+
+
+                        inputVal = alldigitals[9];
+                        if (inputVal == -1) {
+                            Log.w(TAG, "reading Input5 (TYPE 10) returned error (-1), trying again");
+                            inputVal = hardware.getInputState(MicronetHardware.TYPE_INPUT10);
+                            if (inputVal == -1) {
+                                Log.e(TAG, "reading Input5 (TYPE 10) returned error (-1) on retry, aborting read");
+                            }
+                        }
+                        if (inputVal != -1) { // valid Input Value
+                            hardwareInputResults.input5 = (inputVal == 0 ? 0 : 1);
+                        } // valid Input Value
+
+                        if (io_scheme == IO_SCHEME_97) {
+                            // scheme 97 additionally has input 6
+                            inputVal = alldigitals[10];
+                            if (inputVal == -1) {
+                                Log.w(TAG, "reading Input6 (TYPE 11) returned error (-1), trying again");
+                                inputVal = hardware.getInputState(MicronetHardware.TYPE_INPUT11);
+                                if (inputVal == -1) {
+                                    Log.e(TAG, "reading Input6 (TYPE 11) returned error (-1) on retry, aborting read");
+                                }
+                            }
+                            if (inputVal != -1) { // valid Input Value
+                                hardwareInputResults.input6 = (inputVal == 0 ? 0 : 1);
+                            } // valid Input Value
+                        } // scheme 97
+                    } // A or 97 (additional digital inputs)
+
+
+                    ///////////////////////////////
+                    // Ignition detection
+
+
+                    if (io_scheme == IO_SCHEME_6) {
+                        // In scheme 6 , type 8 is a digital input and is the ignition line
+                        inputVal = alldigitals[7];
+                        if (inputVal == -1) {
+                            Log.w(TAG, "reading IGN (TYPE 8) returned error (-1), trying again");
+                            inputVal = hardware.getInputState(MicronetHardware.TYPE_INPUT8);
+                            if (inputVal == -1) {
+                                Log.e(TAG, "reading IGN (TYPE 8) returned error (-1) on retry, aborting read");
+                            }
+
+                        }
+                        if (inputVal != -1) { // valid Input Value
+                            hardwareInputResults.ignition_valid = true;
+                            hardwareInputResults.ignition_input = (inputVal != 0);
+                        } // valid Input Value
+                    } else if (io_scheme == IO_SCHEME_A) {
+                        // In Scheme A, type 11 is a digital input and is the ignition line
+                        inputVal = alldigitals[10];
+                        if (inputVal == -1) {
+                            Log.w(TAG, "reading IGN (TYPE 11) returned error (-1), trying again");
+                            inputVal = hardware.getInputState(MicronetHardware.TYPE_INPUT11);
+                            if (inputVal == -1) {
+                                Log.e(TAG, "reading IGN (TYPE 11) returned error (-1) on retry, aborting read");
+                            }
+                        }
+                        if (inputVal != -1) { // valid Input Value
+                            //hardwareInputResults.input6 = (inputVal != 0);
+
+                            hardwareInputResults.ignition_valid = true;
+                            hardwareInputResults.ignition_input = (inputVal != 0);
+                        } // valid Input Value
+
+                    } else if (io_scheme == IO_SCHEME_97) {
+                        // in scheme 97, type 1 is a digital input and is the ignition line
+                        inputVal = alldigitals[0];
+                        if (inputVal == -1) {
+                            Log.w(TAG, "reading IGN (TYPE 1) returned error (-1), trying again");
+                            inputVal = hardware.getInputState(MicronetHardware.TYPE_INPUT1);
+                            if (inputVal == -1) {
+                                Log.e(TAG, "reading IGN (TYPE 1) returned error (-1) on retry, aborting read");
+                            }
+                        }
+                        if (inputVal != -1) { // valid Input Value
+                            //hardwareInputResults.input6 = (inputVal != 0);
+
+                            hardwareInputResults.ignition_valid = true;
+                            hardwareInputResults.ignition_input = (inputVal != 0);
+                        } // valid Input Value
+
+                    } // schemes
+
+                } // getAllPinState() returned SOMETHING
+
 
                 /*
-                // Alternatively, this data could be gotten with sensor manager, but then there's no hint if something were to go wrong
-                //
-
-                SensorManager sensorManager = (SensorManager) hwcontext.getSystemService(hwcontext.SENSOR_SERVICE);
-                Sensor sensor;
-                sensor = sensorManager.getDefaultSensor(MicronetHardware.AUTOMOTIVE_IN_SENSOR_ID);
-                */
-
                 int inputVal;
                 // read input 1
                 inputVal= hardware.getInputState(MicronetHardware.TYPE_INPUT2);
@@ -511,12 +875,12 @@ public class Io {
                 //  is undefined when input1,2, or 3 is physically high.
 
                 // IF NO IGNITION CONCURRENCY PROBLEM, then just use this code to get the remaining inputs:
-                /*
-                hardwareResults.ignition_input = (hardware.getInputState(MicronetHardware.TYPE_INPUT1) != 0);
-                hardwareResults.input4 = (hardware.getInputState(MicronetHardware.TYPE_INPUT9) != 0);
-                hardwareResults.input5 = (hardware.getInputState(MicronetHardware.TYPE_INPUT10) != 0);
-                hardwareResults.input6 = (hardware.getInputState(MicronetHardware.TYPE_INPUT11) != 0);
-                */
+
+                // hardwareResults.ignition_input = (hardware.getInputState(MicronetHardware.TYPE_INPUT1) != 0);
+                // hardwareResults.input4 = (hardware.getInputState(MicronetHardware.TYPE_INPUT9) != 0);
+                // hardwareResults.input5 = (hardware.getInputState(MicronetHardware.TYPE_INPUT10) != 0);
+                // hardwareResults.input6 = (hardware.getInputState(MicronetHardware.TYPE_INPUT11) != 0);
+
 
                 // Otherwise, use this code to minimize false readings to an acceptable range:
 
@@ -574,7 +938,7 @@ public class Io {
                 } // valid Input Value
 
 
-                // Read Input 5
+                // Read Input 6
                 inputVal= hardware.getInputState(MicronetHardware.TYPE_INPUT11);
                 if (inputVal == -1) {
                     Log.w(TAG, "reading Input6 (TYPE 11) returned error (-1), trying again");
@@ -596,6 +960,9 @@ public class Io {
                 } // valid Input Value
 
 
+*/
+
+
 /*
                 // Log Physical
                 Log.d(TAG, "Inputs (Phy): " +
@@ -614,6 +981,7 @@ public class Io {
                 Log.e(TAG, "Exception = " + e.toString(), e);
                 return null;
             }
+
         } // no null
 
         long end_now = SystemClock.elapsedRealtime();
@@ -621,17 +989,17 @@ public class Io {
 
         return hardwareInputResults;
 
-    } // getHardwareInputs()
+    } // getAllHardwareInputs()
 
 
 
     //////////////////////////////////////////////////////////
-    // getHardwareVoltage()
+    // getHardwareVoltageOnly()
     //  Calls the hardware API
-    //  This is called from timer to get the state of the hardware analog inputs
-    // Returns the voltage of the analog input
+    //  This is called from timer to get the state of the voltage
+    // Returns the voltage of the analog input, used during init
     //////////////////////////////////////////////////////////
-    public static HardwareVoltageResults getHardwareVoltage() {
+    public static HardwareVoltageResults getHardwareVoltageOnly() {
 
 
         long start_now = SystemClock.elapsedRealtime();
@@ -639,7 +1007,6 @@ public class Io {
         Log.v(TAG, "getHardwareVoltage()");
 
         HardwareVoltageResults hardwareVoltageResults = new HardwareVoltageResults();
-
 
         hardwareVoltageResults.savedTime = start_now;
 
@@ -660,18 +1027,23 @@ public class Io {
 
             try {
 
-                // First, get the voltage
-                hardwareVoltageResults.voltage = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT1) / 1000.0;
+                int inputVal;
 
-                // Log Physical
-//                Log.d(TAG, "Analog (Phy): " +
-  //                              (hardwareVoltageResults.voltage) + "V"
-//
-  //              );
+                inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT1);
+                if (inputVal == -1) {
+                    Log.w(TAG, "reading Analog1 returned error (-1), trying again");
+                    inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT1);
+                    if (inputVal == -1) {
+                        Log.e(TAG, "reading Analog1 returned error (-1) on retry, aborting read");
+                    }
+                }
+                if (inputVal != -1) {
+                    hardwareVoltageResults.voltage = inputVal / 1000.0; // convert to volts from mvolts
+                }
 
 
             } catch (Exception e) {
-                Log.e(TAG, "Exception when trying to get Voltage from Micronet Hardware API ");
+                Log.e(TAG, "Exception when trying getAnalogInput() from Micronet Hardware API ");
                 Log.e(TAG, "Exception = " + e.toString(), e);
                 return null;
             }
@@ -945,8 +1317,10 @@ public class Io {
     // checkDigitalInput()
     //  checks the physical state of the input and determines the logical state
     //  called every 1/10th second
+    // Parameters:
+    //  physical_on : 0 for low, 1 for high, -1 for float
     //////////////////////////////////////////////////////////
-    boolean checkDigitalInput(int input_num, boolean physical_on) {
+    boolean checkDigitalInput(int input_num, int physical_on) {
         int setting_id;
         int event_on_id, event_off_id;
         int state_id;
@@ -997,10 +1371,13 @@ public class Io {
         // get the active level for this input as a boolean and determine the instantaneous logical state
         int active_level_i = service.config.readParameterInt(setting_id, Config.PARAMETER_INPUT_GP_BIAS);
         boolean logical_on; // the instantaneous logical state
-        if (active_level_i == 0) // this input is active-low, convert
-            logical_on = !physical_on;
+
+        if (physical_on == HW_INPUT_FLOAT)  // physically floating, this means we are logically inactive
+            logical_on = false;
+        else if (active_level_i == 0) // this input is active-low, convert
+            logical_on = (physical_on == 1 ? false : true);
         else
-            logical_on = physical_on;
+            logical_on = (physical_on == 1 ? true : false);
 
 
         // are we in reset?
@@ -1021,10 +1398,21 @@ public class Io {
         // not in reset ... start checking this input as normal
         if (logical_on != flagInput) { // in the wrong state, should be debouncing
             if (gpInputDebounces[input_num-1] == 0) {
-                gpInputDebounces[input_num - 1] = service.config.readParameterInt(
-                        setting_id,
-                        Config.PARAMETER_INPUT_GP_TENTHS_DEBOUNCE);
 
+                if (logical_on)
+                    gpInputDebounces[input_num - 1] = service.config.readParameterInt(
+                        setting_id,
+                        Config.PARAMETER_INPUT_GP_TENTHS_DEBOUNCE_TOACTIVE);
+                else {
+                    gpInputDebounces[input_num - 1] = service.config.readParameterInt(
+                            setting_id,
+                            Config.PARAMETER_INPUT_GP_TENTHS_DEBOUNCE_TOINACTIVE);
+                    if (gpInputDebounces[input_num - 1] == 0) {
+                        gpInputDebounces[input_num - 1] = service.config.readParameterInt(
+                                setting_id,
+                                Config.PARAMETER_INPUT_GP_TENTHS_DEBOUNCE_TOACTIVE);
+                    }
+                }
                 // convert from tenths of a second (configuration) to our set poll period, rounding up
                 gpInputDebounces[input_num - 1] = (gpInputDebounces[input_num - 1] + INPUT_POLL_PERIOD_TENTHS - 1) / INPUT_POLL_PERIOD_TENTHS;
             }
@@ -1103,10 +1491,13 @@ public class Io {
 
                 Log.v(TAG, "initTask()");
 
+                // determine if we should be using an analog or digital scheme
+                io_scheme = getHardwareIoScheme();
+
                 deviceConstants.deviceId = getHardwareDeviceId();
                 deviceConstants.deviceBootCapturedInputs = getHardwareBootState();
                 // set the initial physical voltage value .. this is needed to be put into messages
-                HardwareVoltageResults hardwareVoltageResults = getHardwareVoltage();
+                HardwareVoltageResults hardwareVoltageResults = getHardwareVoltageOnly();
                 if (hardwareVoltageResults  != null)
                     setVoltageInput(hardwareVoltageResults.voltage);
 
@@ -1164,27 +1555,24 @@ public class Io {
 
                 double voltage_input;
                 boolean ignition_input, ignition_valid;
-                boolean input1, input2, input3, input4, input5, input6;
+                int input1, input2, input3, input4, input5, input6;
 
                 voltage_input = DEFAULT_BATTERY_VOLTS;
                 ignition_input = DEFAULT_IGNITION_STATE;
                 ignition_valid = true;
-                input1 = DEFAULT_INPUT1_STATE;
-                input2 = DEFAULT_INPUT2_STATE;
-                input3 = DEFAULT_INPUT3_STATE;
-                input4 = DEFAULT_INPUT4_STATE;
-                input5 = DEFAULT_INPUT5_STATE;
-                input6 = DEFAULT_INPUT6_STATE;
+                input1 = (DEFAULT_INPUT1_STATE ? 1 : 0);
+                input2 = (DEFAULT_INPUT2_STATE ? 1 : 0);
+                input3 = (DEFAULT_INPUT3_STATE ? 1 : 0);
+                input4 = (DEFAULT_INPUT4_STATE ? 1 : 0);
+                input5 = (DEFAULT_INPUT5_STATE ? 1 : 0);
+                input6 = (DEFAULT_INPUT6_STATE ? 1 : 0);
 
-                HardwareVoltageResults hardwareVoltageResults = getHardwareVoltage();
-                HardwareInputResults hardwareInputResults = getHardwareInputs();
+                //HardwareVoltageResults hardwareVoltageResults = getHardwareVoltage();
+                HardwareInputResults hardwareInputResults = getAllHardwareInputs();
 
                 if (!DEFAULT_ALWAYS_OVERRIDE) {
-                    if (hardwareVoltageResults != null) {
-                        // always use the results of actual hardware, if they are present
-                        voltage_input = hardwareVoltageResults.voltage;
-                    }
                     if (hardwareInputResults != null) {
+                        voltage_input = hardwareInputResults.voltage;
                         ignition_input = hardwareInputResults.ignition_input;
                         ignition_valid = hardwareInputResults.ignition_valid;
                         input1 = hardwareInputResults.input1;
@@ -1196,7 +1584,7 @@ public class Io {
                     }
                 }
 
-
+/*
                 // should we allow the use of input 6 as ignition line ?
                 // if voltage is detected on this line, then switch over
                 if (service.SHOULD_ALLOW_INPUT6_AS_IGNITION) {
@@ -1209,22 +1597,21 @@ public class Io {
                         service.state.writeState(State.FLAG_USING_INPUT6_AS_IGNITION, 1); // remember this
                     }
                 }
-
+*/
 
                 // log the current state values for physical input once every 10 seconds
                 //counter++;
                 //if ((counter % 10) == 0) {
-                if ((hardwareVoltageResults != null) &&
-                    (hardwareInputResults != null )) {
+                if ((hardwareInputResults != null )) {
                     Log.d(TAG, "Inputs (Phy): " +
                         (voltage_input) + "V" +
                         " , IGN:" + (ignition_valid ? (ignition_input ? "1" : "0") : "?") +
-                        " , IN1:" + (input1 ? "1" : "0") +
-                        " , IN2:" + (input2 ? "1" : "0") +
-                        " , IN3:" + (input3 ? "1" : "0") +
-                        " , IN4:" + (input4 ? "1" : "0") +
-                        " , IN5:" + (input5 ? "1" : "0") +
-                        " , IN6:" + (input6 ? "1" : "0")
+                        " , IN1:" + (input1 == HW_INPUT_FLOAT ? "F" : input1) +
+                        " , IN2:" + (input2 == HW_INPUT_FLOAT ? "F" : input2) +
+                        " , IN3:" + (input3 == HW_INPUT_FLOAT ? "F" : input3) +
+                        " , IN4:" + (input4 == HW_INPUT_FLOAT ? "F" : input4) +
+                        " , IN5:" + (input5 == HW_INPUT_FLOAT ? "F" : input5) +
+                        " , IN6:" + (input6 == HW_INPUT_FLOAT ? "F" : input6)
                     );
                 }
                 //}
@@ -1253,7 +1640,7 @@ public class Io {
     } // IoPollTask()
 
 
-
+/*
     public void startSensor() {
 
         SensorManager sensorManager = (SensorManager) service.context.getSystemService(Context.SENSOR_SERVICE);
@@ -1321,5 +1708,5 @@ public class Io {
 
     } // SensorTask()
 
-
+*/
 } // class

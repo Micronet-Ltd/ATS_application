@@ -59,6 +59,9 @@ public class Ota {
 
     MainService service; // contains the context
 
+
+    int watchdogStage = 0; // what stage the com watchdog is at.
+
     public Ota(MainService service) {
         this.service = service;
 
@@ -88,6 +91,8 @@ public class Ota {
         mainHandler  = new Handler();
         mainHandler.postDelayed(checkTask, CHECK_TIMER_MS_NORMAL);
 
+        // make sure we are not accidentally left in airplane mode
+        service.power.setAirplaneMode(false);
     } // start()
 
     //////////////////////////////////////////////////////////////////
@@ -102,6 +107,8 @@ public class Ota {
         service.context.unregisterReceiver(connectivityChangeReceiver);
         mainHandler.removeCallbacks(checkTask);
         clearBackoff();
+        clearWatchdog();
+
         ((TelephonyManager) service.context.getSystemService(Context.TELEPHONY_SERVICE)).
                 listen(mySignalStrengthListener,PhoneStateListener.LISTEN_NONE);
 
@@ -109,7 +116,7 @@ public class Ota {
         if (myUdp != null)
             myUdp.stop();
 
-    }
+    } // stop()
 
     //////////////////////////////////////////////////////////////////
     // destroy();
@@ -300,6 +307,75 @@ public class Ota {
     }
 
 
+
+
+    ///////////////////////////////////////////////////////////////
+    // startWatchdog()
+    //  Use this to start the next watchdog period,
+    //      The watchdog will check for communication with the server within the designated time, or will fire an escalating action
+    ///////////////////////////////////////////////////////////////
+    private void startWatchdog() {
+
+
+        Log.v(TAG, "startWatchdog() ");
+        if (watchdogStage != 0) return; // watchdog is already running
+
+        escalateWatchdog(); // escalate watchdog to the next stage
+
+    } // startWatchdog()
+
+
+
+    ///////////////////////////////////////////////////////////////
+    // escalateWatchdog()
+    //  Use this to go to the next step in the watchdog, e.g. after a stage expires and is fired.
+    ///////////////////////////////////////////////////////////////
+    private void escalateWatchdog() {
+        int nextseconds, nextstage;
+        nextseconds = 0;
+
+        if (watchdogStage < 10) {
+            nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_TIME1);
+            if (nextseconds != 0) watchdogStage = 10;
+        }
+
+        if ((nextseconds == 0) && (watchdogStage < 20)) {
+            nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_TIME2);
+            if (nextseconds != 0) watchdogStage = 20;
+        }
+
+        if ((nextseconds == 0) && (watchdogStage < 30)) {
+            nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_TIME3);
+            if (nextseconds != 0) watchdogStage = 30;
+        }
+
+        if (nextseconds != 0) {
+            Log.d(TAG, "Server-Comm Watchdog will escalate to stage " + (watchdogStage/10) + " in " +  nextseconds + " seconds");
+            mainHandler.postDelayed(watchdogTask, nextseconds * 1000); // to ms from seconds
+        } else {
+            //Log.d(TAG, "Server Comm watchdog not set");
+        }
+
+    } // escalateWatchdog()
+
+
+
+    ///////////////////////////////////////////////////////////////
+    // clearWatchdog()
+    //  Use this to stop the com watchdog if it is running, e.g. after an ACK is received
+    ///////////////////////////////////////////////////////////////
+    private void clearWatchdog() {
+
+        if (watchdogStage != 0){
+            Log.v(TAG, "clearWatchdog()");
+        }
+
+        mainHandler.removeCallbacks(watchdogTask);
+        watchdogStage= 0;
+
+    } // clearWatchdog()
+
+
     /////////////////////////////////////////////////////////////
     // requiresAck()
     // returns
@@ -352,7 +428,7 @@ public class Ota {
             }
         }
 
-    }
+    } // attemptListenMessage()
 
 
     ////////////////////////////////////////////////////////
@@ -391,6 +467,16 @@ public class Ota {
     private boolean attemptSendMessage() {
         Log.vv(TAG, "attemptSend()");
 
+        // Is there something in the queue to send ?
+        QueueItem queueItem = service.queue.getFirstItem();
+
+        if (queueItem == null) return false; // nothing in queue to attempt
+
+        startWatchdog(); // start the watchdog timer if it is not already running
+
+        // Now that the watchdog is running, we can see if it is OK to attempt a send.
+        // Watchdog will fire even if we never attempt a send in case we are stuck somewhere else
+
         if (isInBackoff()) return false;    // in a back-off period, cannot make an attempt yet
 
         NetworkInfo active = isDataNetworkConnected();
@@ -398,10 +484,6 @@ public class Ota {
 
         // TODO: signal strength check ?
         //   A: don't do this for now as the platform has problems reporting the correct signal strength (Apr2014)
-
-        QueueItem queueItem = service.queue.getFirstItem();
-
-        if (queueItem == null) return false; // nothing in queue to attempt
 
 
         // Make sure that the IO is fully initialized
@@ -606,6 +688,9 @@ public class Ota {
 
         // clear the backoff timer (since we are talking to server)
         clearBackoff();
+        // clear the watchdog timer (since we are talking to server)
+        clearWatchdog();
+
         // attempt to send something from queue if we have something
         attemptSendMessage();
 
@@ -712,13 +797,14 @@ public class Ota {
         if (requiresAck(queueItem)) {
             // set the backoff timer
             Log.v(TAG, "(ACK Rqd)");
-            nextBackoff();
+            nextBackoff(); // start the backoff timer if required
         } else {
             // remove from queue right away
             Log.v(TAG, "(NO ACK Rqd)");
+            clearWatchdog(); // clear the watchdog timer (since we don't expect an ACK)
             service.queue.deleteItemByID(queueItem.getId());
         }
-    } // sendMessage
+    } // sendMessage()
 
 
 
@@ -733,7 +819,7 @@ public class Ota {
         @Override
         public void run() {
             try {
-                Log.vv(TAG, "checkTask()");
+                Log.vv(TAG, "checkTask(): timer expired");
 
                 boolean justsent;
 
@@ -750,7 +836,7 @@ public class Ota {
                 mainHandler.postDelayed(checkTask, CHECK_TIMER_MS_NORMAL);
             }
         }
-    };
+    }; // checkTask()
 
 
 
@@ -764,13 +850,66 @@ public class Ota {
         public void run() {
             try {
                 backoffUntilTimer = false;
-                Log.v(TAG, "Receiver: backoff timer expired");
+                Log.v(TAG, "backoffTask(): timer expired");
                 attemptSendMessage();
             } catch(Exception e) {
                 Log.e(TAG + ".backoffTask", "Exception: " + e.toString(), e);
             }
         }
-    };
+    }; // backoffTask()
+
+
+
+
+
+    ///////////////////////////////////////////////////////////////
+    // watchdogTask()
+    //  Timer that checks it hasn't been too long since we last communicated with server
+    ///////////////////////////////////////////////////////////////
+    private Runnable watchdogTask = new Runnable() {
+
+        @Override
+        public void run() {
+            try {
+                //backoffUntilTimer = false;
+                Log.i(TAG, "Server-Comm Watchdog triggered @ stage=" + (watchdogStage/10) + " step " + (watchdogStage%10));
+
+                switch(watchdogStage) {
+
+                    case 10: // first stage, attempt ____
+                        // check back in xx
+                        service.addEventWithExtra(QueueItem.EVENT_TYPE_ERROR, QueueItem.ERROR_OTA_STAGE_UDP);
+                        if (myUdp != null) myUdp.stop(); // try to stop the UDP socket
+                        // the socket will be opened by checkTask if it is closed like every 500 ms.
+                        escalateWatchdog(); // escalate to next stage
+                        break;
+
+                    case 20: // Enter airplane mode
+                        service.addEventWithExtra(QueueItem.EVENT_TYPE_ERROR, QueueItem.ERROR_OTA_STAGE_AIRPLANEMODE);
+                        service.power.setAirplaneMode(true);
+                        mainHandler.postDelayed(watchdogTask, 2000); // come back in two seconds to turn it back on
+                        watchdogStage++; // go to next step in this stage
+                        break;
+
+                    case 21: // Exit airplane mode
+                        service.power.setAirplaneMode(false);
+                        escalateWatchdog(); // escalate to next stage
+                        break;
+
+                    case 30: // shutdown the the device
+                        service.addEventWithExtra(QueueItem.EVENT_TYPE_ERROR, QueueItem.ERROR_OTA_STAGE_REBOOT);
+                        service.power.powerDown();
+                        break;
+                }
+
+            } catch(Exception e) {
+                Log.e(TAG + ".watchdogTask", " + Exception (Stage " + watchdogStage + "): " + e.toString(), e);
+                mainHandler.postDelayed(watchdogTask, 2000); // try again in 2 sec ?
+                return;
+            }
+        }
+    }; // watchdogTask()
+
 
 
     ///////////////////////////////////////////////////////////////
@@ -807,7 +946,7 @@ public class Ota {
                 Log.e(TAG + ".connectivityChangeReceiver", "Exception: " + e.toString(), e);
             }
         } // OnReceive()
-    }; // connectivityChangeReceiver
+    }; // connectivityChangeReceiver()
 
 
 

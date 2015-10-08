@@ -73,6 +73,9 @@ public class QueueItem {
     // Define the various errors that can be used in the error eventcode message
 
     public static int ERROR_IO_THREAD_JAMMED = 1;
+    public static int ERROR_OTA_STAGE_UDP = 11;
+    public static int ERROR_OTA_STAGE_AIRPLANEMODE = 15;
+    public static int ERROR_OTA_STAGE_REBOOT = 19;
 
 
     // Define any event codes that should be ignored

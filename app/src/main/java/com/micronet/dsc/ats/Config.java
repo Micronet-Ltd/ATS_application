@@ -68,12 +68,13 @@ public class Config {
     public static final int SETTING_INPUT_GP3 = 13;
     public static final int SETTING_INPUT_GP4 = 14;
     public static final int SETTING_INPUT_GP5 = 15;
-    public static final int SETTING_INPUT_GP6 = 16;
+    public static final int SETTING_INPUT_GP6 = 24;
         public static final int PARAMETER_INPUT_GP_BIAS = 0;
-        public static final int PARAMETER_INPUT_GP_TENTHS_DEBOUNCE = 1;
+        public static final int PARAMETER_INPUT_GP_TENTHS_DEBOUNCE_TOACTIVE = 1;
         public static final int PARAMETER_INPUT_GP_TENTHS_RESET_AFTER_OFF = 2;
         public static final int PARAMETER_INPUT_GP_SECONDS_WAKE = 3;
         public static final int PARAMETER_INPUT_GP_MESSAGES = 4;
+        public static final int PARAMETER_INPUT_GP_TENTHS_DEBOUNCE_TOINACTIVE = 5;
     public static final int SETTING_MOVING_THRESHOLD = 17;
         public static final int PARAMETER_MOVING_THRESHOLD_CMS = 0; // speed cm / s
     public static final int SETTING_IDLING = 18;
@@ -92,9 +93,14 @@ public class Config {
         public static final int PARAMETER_CORNERING_TENTHS = 1; // tenths of seconds
     public static final int SETTING_COMMUNICATION = 23;
         public static final int PARAMETER_COMMUNICATION_NONCELLULAR_OK = 0; // boolean, set if wifi should be used
+    // 24 is Input GP6, see above
+    public static final int SETTING_COMWATCHDOG = 25;
+        public static final int PARAMETER_COMWATCHDOG_TIME1 = 0; // seconds
+        public static final int PARAMETER_COMWATCHDOG_TIME2 = 1; // seconds
+        public static final int PARAMETER_COMWATCHDOG_TIME3 = 2; // seconds
 
 
-    public static final int NUM_SETTINGS = 23;
+    public static final int NUM_SETTINGS = 25;
 
     public static final String[] SETTING_DEFAULTS = {
             "", // Reserved
@@ -108,19 +114,21 @@ public class Config {
             "105|300|300|1", // Low Battery: 1/10 volts, seconds below, seconds above, messages
             "132|300|300|1", // Bad Alternator: 1/10 volts, seconds below, seconds above, messages
             "1800|3", // Ignition Line: seconds awake, messages
-            "1|20|40|1800|1", // Input 1: bias, 1/10 seconds on, 1/10 seconds off, 1/10 seconds delay, messages
-            "1|20|40|1800|1", // Input 2: bias, 1/10 seconds on, 1/10 seconds off, 1/10 seconds delay, messages
-            "1|20|40|1800|1", // Input 3: bias, 1/10 seconds on, 1/10 seconds off, 1/10 seconds delay, messages
-            "1|20|40|1800|1", // Input 4: bias, 1/10 seconds on, 1/10 seconds off, 1/10 seconds delay, messages
-            "1|20|40|1800|1", // Input 5: bias, 1/10 seconds on, 1/10 seconds off, 1/10 seconds delay, messages
-            "1|20|40|1800|1", // Input 6: bias, 1/10 seconds on, 1/10 seconds off, 1/10 seconds delay, messages
+            "1|20|40|1800|1|0", // Input 1: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
+            "1|20|40|1800|1|0", // Input 2: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
+            "1|20|40|1800|1|0", // Input 3: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
+            "1|20|40|1800|1|0", // Input 4: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
+            "1|20|40|1800|1|0", // Input 5: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
+            "", // Old Input6 -- not used
             "130", // Moving Threshold: cm/s
             "300", // Idling: seconds
             "3000|10", // Speeding: cm/s , seconds
             "250|15", // Acceleration: cm/s^2, 1/10 seconds
             "300|15", // Braking: cm/s^2, 1/10 seconds
             "200|20", // Cornering: cm/s^2, 1/10 seconds
-            "0" // Do not send packets if cellular not active
+            "0", // Do not send packets if cellular not active
+            "1|20|40|0|0|0", // Input 6: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
+            "900|120|120"
     };
 
 

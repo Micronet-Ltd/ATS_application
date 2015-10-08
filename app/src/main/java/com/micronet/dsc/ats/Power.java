@@ -20,6 +20,7 @@ import android.net.NetworkInfo;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.provider.Settings;
 //import android.provider.Settings;
 //import android.support.v4.content.WakefulBroadcastReceiver;
 
@@ -99,6 +100,7 @@ public class Power {
 
         mainHandler  = new Handler(); // initialize
         service.context.registerReceiver(redbendReceiver, filter);
+
 
     } // start()
 
@@ -722,6 +724,39 @@ public class Power {
 
 */
 
+
+
+    /////////////////////////////////////////////////////////////////////////////////
+    // setAirplaneMode()
+    //  turns airplane mode off or on
+    /////////////////////////////////////////////////////////////////////////////////
+    void setAirplaneMode(boolean on) {
+
+        // Note, this code will not work with or above android version 4.2
+
+		Log.i(TAG, "Setting Airplane Mode = " + on);
+
+        // Toggle airplane mode.
+        Settings.System.putInt(
+                service.context.getContentResolver(),
+                Settings.System.AIRPLANE_MODE_ON, on ? 1 : 0);
+
+        // Post an intent to reload.
+        Intent intent = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        intent.putExtra("state", on);
+        service.context.sendBroadcast(intent);
+
+    } // setAirplaneMode
+
+
+
+
+
+
+    /////////////////////////////////////////////////////////////////////////////////
+    // isScreenOn()
+    //  checks whether screen is on. we do not normally power-down when screen is on
+    /////////////////////////////////////////////////////////////////////////////////
     boolean isScreenOn() {
         PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
         return pm.isScreenOn();
@@ -730,12 +765,14 @@ public class Power {
     }
 
 
-
+    /////////////////////////////////////////////////////////////////////////////////
+    // powerDown()
+    //  requests power down of the device
+    /////////////////////////////////////////////////////////////////////////////////
     void powerDown() {
 
-        // Do not ever re-send a power down request
-
         if (powerdownWasSent) {
+            // Do not ever re-send a power down request more than once
             Log.i(TAG, "Skipping Power Down Request (already sent)");
         } else {
             Log.i(TAG, "Sending Power Down Request (expect 7s delay)");
@@ -746,6 +783,21 @@ public class Power {
 
     } // powerDown()
 
+    /////////////////////////////////////////////////////////////////////////////////
+    // reboot()
+    //  requests a reboot of the device
+    /////////////////////////////////////////////////////////////////////////////////
+    void reboot() {
+        if (powerdownWasSent) {
+            // Do not ever re-send a power down request more than once
+            Log.i(TAG, "Skipping Reboot Request (already sent)");
+        } else {
+            Log.i(TAG, "Sending Reboot Request (expect 7s delay)");
+            powerdownWasSent = true;
+            PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
+            pm.reboot(null);
+        }
+    } // reboot()
 
 
 

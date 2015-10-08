@@ -97,16 +97,16 @@ public class MainActivity extends ActionBarActivity {
             editVoltage = (EditText) findViewById(R.id.editTextVolts);
 
             if (!Io.DEFAULT_ALWAYS_OVERRIDE) {
-                Io.HardwareInputResults hardwareInputResults = Io.getHardwareInputs();
+                Io.HardwareInputResults hardwareInputResults = Io.getAllHardwareInputs();
 
                 if (hardwareInputResults  != null) {
                     checkBoxIgnition.setChecked(hardwareInputResults.ignition_input);
-                    checkBoxInput1.setChecked(hardwareInputResults.input1);
-                    checkBoxInput2.setChecked(hardwareInputResults.input2);
-                    checkBoxInput3.setChecked(hardwareInputResults.input3);
-                    checkBoxInput4.setChecked(hardwareInputResults.input4);
-                    checkBoxInput5.setChecked(hardwareInputResults.input5);
-                    checkBoxInput6.setChecked(hardwareInputResults.input6);
+                    checkBoxInput1.setChecked(hardwareInputResults.input1 == 1);
+                    checkBoxInput2.setChecked(hardwareInputResults.input2 == 1);
+                    checkBoxInput3.setChecked(hardwareInputResults.input3 == 1);
+                    checkBoxInput4.setChecked(hardwareInputResults.input4 == 1);
+                    checkBoxInput5.setChecked(hardwareInputResults.input5 == 1);
+                    checkBoxInput6.setChecked(hardwareInputResults.input6 == 1);
                     editVoltage.setText("" + Io.DEFAULT_BATTERY_VOLTS);
                     //editVoltage.setText("13.4");
                     //editVoltage.setText(("" + hardwareResults.voltage));
@@ -354,8 +354,8 @@ public class MainActivity extends ActionBarActivity {
         Log.v(TAG, "showStatus()");
         final List<QueueItem> list =  mService.queue.getAllItems();
 
-        final Io.HardwareInputResults hardwareInputResults = Io.getHardwareInputs();
-        final Io.HardwareVoltageResults hardwareVoltageResults = Io.getHardwareVoltage();
+        final Io.HardwareInputResults hardwareInputResults = Io.getAllHardwareInputs();
+        //final Io.HardwareVoltageResults hardwareVoltageResults = Io.getHardwareVoltage();
 
         MainActivity.this.runOnUiThread(new Runnable() {
             public void run() {
@@ -383,9 +383,9 @@ public class MainActivity extends ActionBarActivity {
                 String hardwareStr;
                 hardwareStr = "";
 
-                if ((hardwareInputResults != null) && (hardwareVoltageResults != null)) {
+                if ((hardwareInputResults != null)) {
 
-                    hardwareStr = dateutc + "; " + hardwareVoltageResults.voltage + "V; " +
+                    hardwareStr = dateutc + "; " + hardwareInputResults.voltage + "V; " +
                             "IGN " + hardwareInputResults.ignition_input + "; " +
                             "IN1 " + hardwareInputResults.input1 + "; " +
                             "IN2 " + hardwareInputResults.input2 + "; " +
