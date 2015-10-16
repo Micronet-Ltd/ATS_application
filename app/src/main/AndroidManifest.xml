@@ -55,14 +55,14 @@
         </receiver>
 
 
-        <!-- Start the Service if applicable on boot -->
-        <!--
+        <!-- Start the Service on boot -->
+
         <receiver android:name=".BootReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
-        -->
+
 
         <!-- Stop the service if applicable on shutdown -->
         <receiver android:name=".ShutdownReceiver">

@@ -28,15 +28,18 @@ public class ShutdownReceiver extends BroadcastReceiver {
 
 			Log.d(TAG, "System Shutdown Notification -- Taking action");
 
-			// Send intent to service (to shut itself down)
-			Intent i = new Intent(context, MainService.class);
-			i.putExtra(Power.SHUTDOWN_REQUEST_NAME, 1);
-			context.startService(i);
 		} else {
 			
 			// Do not do anything with this notification
-			Log.d(TAG, "System Shutdown Notification -- Ignored");
+			Log.d(TAG, "System Shutdown Notification Received");
 		}
+
+		// Send intent to service (to shut itself down)
+		Intent i = new Intent(context, MainService.class);
+		i.putExtra(Power.SHUTDOWN_REQUEST_NAME, 1);
+		context.startService(i);
+
+
     }
 
 } // class

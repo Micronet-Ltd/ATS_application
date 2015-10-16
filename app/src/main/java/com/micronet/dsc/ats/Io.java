@@ -13,6 +13,7 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
 
@@ -59,7 +60,10 @@ public class Io {
     private static final int ANALOG_THRESHOLD_HIGH_MV = 5000; // anything above 5 volt is high
 
 
+    static final int HW_INPUT_LOW = 0; //
+    static final int HW_INPUT_HIGH = 1; //
     static final int HW_INPUT_FLOAT = -1; // for ints: 0 will me low, 1 will me high and this will mean float
+    static final int HW_INPUT_UNKNOWN = -2; // could not determine a value for the input
 
 
     public static boolean DEFAULT_ALWAYS_OVERRIDE = false; // always use the defaults and ignore the actual hardware states
@@ -86,6 +90,14 @@ public class Io {
     MainService service; // just a reference to the service context
 
     volatile boolean watchdog_IoPollTask = false; // this gets set by the poll task when it completes.
+
+
+    //////////////////////////////////////////
+    // Variables for the safety shutdown window during which we don't fully trust the input values
+
+    private static int SHUTDOWN_WINDOW_MS = 30000; // keep shutdown window open for 30 seconds max.
+    boolean inShutdownWindow = false; // are we in a special shutdown window where we don't trust the inputs ?
+    Handler mainHandler = null;
 
     //////////////////////////////////////////
     // Variables to store info from the Hardware API so we can segregate all calling into monitored threads
@@ -169,6 +181,7 @@ public class Io {
         if (flag) savedIo.input_bitfield |= (1 << 6);
 
 
+        //Log.d(TAG, "Read Input States: " + savedIo.input_bitfield);
 
     } // Io()
 
@@ -185,6 +198,8 @@ public class Io {
 
         Log.v(TAG, "start()");
 
+
+        mainHandler  = new Handler();
 
         // start up a different thread to get and store needed init info from Hardware API
         // this must be in a different thread in case it jams, we can at least detect it.
@@ -305,6 +320,35 @@ public class Io {
         }
 
     } // restoreCrashData
+
+
+
+
+
+
+    //////////////////////////////////////////////////////////
+    // startShutdownWindow()
+    //  This was used when we thought there was a problem during shutdown for Inputs 4,5,6 during IO Scheme6
+    //  Turns out the problem occurred whenever the screen was off,
+
+    //  starts a window during which we expect the device to shutdown.
+    //  during this portions of this period, we can't trust the results that we get from the Tri-state Inputs
+    //  since they seem to return as ground even when they are not grounded for brief periods (seconds).
+
+
+    //////////////////////////////////////////////////////////
+    public void startShutdownWindow() {
+
+        /*
+        Log.v(TAG, "startShutdownWindow()");
+        if (mainHandler != null) { // we're not trying to call this before we called start on the I/O
+            inShutdownWindow = true;
+            mainHandler.removeCallbacks(shutdownWindowTask);
+            mainHandler.postDelayed(shutdownWindowTask, SHUTDOWN_WINDOW_MS);
+        }
+        */
+    } // startShutdownWindow()
+
 
 
     ////////////////////////////////////////////////////////////////////
@@ -518,9 +562,14 @@ public class Io {
 
     public static class HardwareInputResults {
         boolean ignition_input, ignition_valid; // sometimes the ignition reading is unknown or invalid.
-        int input1, input2, input3, input4, input5, input6;
+        int input1 = HW_INPUT_UNKNOWN;
+        int input2 = HW_INPUT_UNKNOWN;
+        int input3 = HW_INPUT_UNKNOWN;
+        int input4 = HW_INPUT_UNKNOWN;
+        int input5 = HW_INPUT_UNKNOWN;
+        int input6 = HW_INPUT_UNKNOWN;
         double voltage;
-        long savedTime;
+        long savedTime; // if this is 0, then they are invalid
     }
 
 
@@ -568,6 +617,9 @@ public class Io {
                     // These schemes have one analog value for the main voltage
                     // cannot use getAllAnalogInput() -- it always returns null
                     inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT1);
+
+                    //Log.v(TAG, " Analog result [" + inputVal + "]");
+
                     if (inputVal == -1) {
                         Log.w(TAG, "reading Analog1 returned error (-1), trying again");
                         inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT1);
@@ -606,7 +658,16 @@ public class Io {
                         if (inputVal != -1) { // valid Input Value
                             hardwareInputResults.voltage = inputVal / 1000.0; // convert to volts from mvolts
                         }
-                        //hardwareVoltageResults.voltage = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT1) / 1000.0;
+
+
+                        /*
+                        //
+                        //
+                        // TEMP: Disable Analog reading for Inputs 4, 5, 6 since it doesn't return correct value when screen is off
+                        //
+                        //
+
+
 
                         // in the analog scheme, TYPE9, TYPE10, and TYPE11 are always read as analog and they can float
                         inputVal = allanalogs[4];
@@ -648,7 +709,7 @@ public class Io {
                         inputVal = allanalogs[6];
                         if (inputVal == -1) {
                             Log.w(TAG, "reading Input6 (TYPE_ANALOG7) returned error (-1), trying again");
-                            inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT6);
+                            inputVal = hardware.getAnalogInput(MicronetHardware.TYPE_ANALOG_INPUT7);
                             if (inputVal == -1) {
                                 Log.e(TAG, "reading Input6 (TYPE_ANALOG7) returned error (-1) on retry, aborting read");
                             }
@@ -663,7 +724,12 @@ public class Io {
                             }
                         }
 
-
+                        //
+                        //
+                        // END TEMP: Disable Analog Reading for Inputs 4,5,6
+                        //
+                        //
+                        */
                     } // analog inputs returned something
                 } // IO_SCHEME_6
 
@@ -726,7 +792,11 @@ public class Io {
 
                     // Does the scheme include additional digital inputs ?
 
-                    if ((io_scheme == IO_SCHEME_97) || (io_scheme==IO_SCHEME_A)) { //scheme A or scheme 97
+                    if (
+                        // TEMP: Disable Analog reading for Inputs 4, 5, 6 since it doesn't return correct value when screen is off
+                            (io_scheme == IO_SCHEME_6) || // read digital inputs for scheme 6.
+                        // END TEMP: Disable Analog reading for Inputs 4, 5, 6 since it doesn't return correct value when screen is off
+                            (io_scheme == IO_SCHEME_97) || (io_scheme==IO_SCHEME_A)) { //scheme A or scheme 97
                         // type  9 and  10 are read as digital inputs
                         inputVal = alldigitals[8];
                         if (inputVal == -1) {
@@ -753,8 +823,8 @@ public class Io {
                             hardwareInputResults.input5 = (inputVal == 0 ? 0 : 1);
                         } // valid Input Value
 
-                        if (io_scheme == IO_SCHEME_97) {
-                            // scheme 97 additionally has input 6
+                        if (io_scheme != IO_SCHEME_A) { // scheme A does not have an Input 6
+                            // scheme 97 and Scheme 6 does have input 6
                             inputVal = alldigitals[10];
                             if (inputVal == -1) {
                                 Log.w(TAG, "reading Input6 (TYPE 11) returned error (-1), trying again");
@@ -1058,6 +1128,35 @@ public class Io {
 
 
 
+    /////////////////////////////////////////////////////////////
+    // correctHardwareInputs()
+    //  Sometimes the values we get back from the hardware API are untrustworthy (like in shutdown)
+    //      this corrects those values
+    /////////////////////////////////////////////////////////////
+    private void correctHardwareInputs(HardwareInputResults hardwareInputResults) {
+
+
+        // The following was used before we decided to disable float-detection on IO Scheme 6.
+
+        /*
+        // In Scheme 6, Inputs 4, 5 and 6 (the tri-state inputs) are untrustworthy if they report a ground during the shutdown window
+        if (io_scheme == IO_SCHEME_6) {
+            if (inShutdownWindow) {
+
+                if (hardwareInputResults.input4 == 0)
+                    hardwareInputResults.input4 = HW_INPUT_UNKNOWN;
+                if (hardwareInputResults.input5 == 0)
+                    hardwareInputResults.input5 = HW_INPUT_UNKNOWN;
+                if (hardwareInputResults.input6 == 0)
+                    hardwareInputResults.input6 = HW_INPUT_UNKNOWN;
+
+            }
+        }
+        */
+
+    } // correctHardwareInputs()
+
+
     //  *************************************************
     //  Methods to manage to logical state of Inputs:
     //  *************************************************
@@ -1340,7 +1439,7 @@ public class Io {
             case 2: setting_id = Config.SETTING_INPUT_GP2;
                     event_on_id = QueueItem.EVENT_TYPE_INPUT2_ON;
                     event_off_id = QueueItem.EVENT_TYPE_INPUT2_OFF;
-                    state_id = State.FLAG_GENERAL_INPUT3;
+                    state_id = State.FLAG_GENERAL_INPUT2;
                 break;
             case 3: setting_id = Config.SETTING_INPUT_GP3;
                     event_on_id = QueueItem.EVENT_TYPE_INPUT3_ON;
@@ -1570,6 +1669,9 @@ public class Io {
                 //HardwareVoltageResults hardwareVoltageResults = getHardwareVoltage();
                 HardwareInputResults hardwareInputResults = getAllHardwareInputs();
 
+                // take into account the state of the application to correct any values we don't trust
+                correctHardwareInputs(hardwareInputResults);
+
                 if (!DEFAULT_ALWAYS_OVERRIDE) {
                     if (hardwareInputResults != null) {
                         voltage_input = hardwareInputResults.voltage;
@@ -1604,31 +1706,38 @@ public class Io {
                 //if ((counter % 10) == 0) {
                 if ((hardwareInputResults != null )) {
                     Log.d(TAG, "Inputs (Phy): " +
-                        (voltage_input) + "V" +
-                        " , IGN:" + (ignition_valid ? (ignition_input ? "1" : "0") : "?") +
-                        " , IN1:" + (input1 == HW_INPUT_FLOAT ? "F" : input1) +
-                        " , IN2:" + (input2 == HW_INPUT_FLOAT ? "F" : input2) +
-                        " , IN3:" + (input3 == HW_INPUT_FLOAT ? "F" : input3) +
-                        " , IN4:" + (input4 == HW_INPUT_FLOAT ? "F" : input4) +
-                        " , IN5:" + (input5 == HW_INPUT_FLOAT ? "F" : input5) +
-                        " , IN6:" + (input6 == HW_INPUT_FLOAT ? "F" : input6)
+                                    (voltage_input) + "V" +
+                                    " , IGN:" + (ignition_valid ? (ignition_input ? "1" : "0") : "?") +
+                                    " , IN1:" + (input1 == HW_INPUT_UNKNOWN ? "?" : (input1 == HW_INPUT_FLOAT ? "F" : input1)) +
+                                    " , IN2:" + (input2 == HW_INPUT_UNKNOWN ? "?" : (input2 == HW_INPUT_FLOAT ? "F" : input2)) +
+                                    " , IN3:" + (input3 == HW_INPUT_UNKNOWN ? "?" : (input3 == HW_INPUT_FLOAT ? "F" : input3)) +
+                                    " , IN4:" + (input4 == HW_INPUT_UNKNOWN ? "?" : (input4 == HW_INPUT_FLOAT ? "F" : input4)) +
+                                    " , IN5:" + (input5 == HW_INPUT_UNKNOWN ? "?" : (input5 == HW_INPUT_FLOAT ? "F" : input5)) +
+                                    " , IN6:" + (input6 == HW_INPUT_UNKNOWN ? "?" : (input6 == HW_INPUT_FLOAT ? "F" : input6))
                     );
                 }
-                //}
+
+                    //}
 
 
                 if (ignition_valid)
-                    checkIgnitionInput(ignition_input );
+                    checkIgnitionInput(ignition_input);
                 else
                     debounceIgnition = 0; // freeze the state we are in (needed because of ignition-comingling bug)
                 setVoltageInput(voltage_input);
                 checkEngineStatus();
-                checkDigitalInput(1, input1);
-                checkDigitalInput(2, input2);
-                checkDigitalInput(3, input3);
-                checkDigitalInput(4, input4);
-                checkDigitalInput(5, input5);
-                checkDigitalInput(6, input6);
+                if (input1 != HW_INPUT_UNKNOWN)
+                    checkDigitalInput(1, input1);
+                if (input2 != HW_INPUT_UNKNOWN)
+                    checkDigitalInput(2, input2);
+                if (input3 != HW_INPUT_UNKNOWN)
+                    checkDigitalInput(3, input3);
+                if (input4 != HW_INPUT_UNKNOWN)
+                    checkDigitalInput(4, input4);
+                if (input5 != HW_INPUT_UNKNOWN)
+                    checkDigitalInput(5, input5);
+                if (input6 != HW_INPUT_UNKNOWN)
+                    checkDigitalInput(6, input6);
 
 
                 watchdog_IoPollTask = true; // successfully completed
@@ -1638,6 +1747,26 @@ public class Io {
 
         } // run()
     } // IoPollTask()
+
+
+
+    ///////////////////////////////////////////////////////////////
+    // shutdownWindowTask()
+    //  Safety timer that ends the shutdown window after shutdown is requested
+    ///////////////////////////////////////////////////////////////
+    private Runnable shutdownWindowTask = new Runnable() {
+
+        @Override
+        public void run() {
+            try {
+                Log.e(TAG, "shutdown window expired w/o shutdown!!!");
+                inShutdownWindow = false;
+            } catch(Exception e) {
+                Log.e(TAG + ".shutdownWindowTask", "Exception: " + e.toString(), e);
+            }
+        }
+    }; // shutdownWindowTask()
+
 
 
 /*

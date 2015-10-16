@@ -776,6 +776,11 @@ public class Power {
             Log.i(TAG, "Skipping Power Down Request (already sent)");
         } else {
             Log.i(TAG, "Sending Power Down Request (expect 7s delay)");
+
+            // Let the IO module know we are requesting shut down so it can look for untrustworthy input values
+            service.io.startShutdownWindow();
+
+            // Send the power down request
             powerdownWasSent = true;
             PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
             pm.reboot(micronet.hardware.MicronetHardware.SHUTDOWN_DEVICE);
@@ -793,6 +798,11 @@ public class Power {
             Log.i(TAG, "Skipping Reboot Request (already sent)");
         } else {
             Log.i(TAG, "Sending Reboot Request (expect 7s delay)");
+
+            // Let the IO module know we are requesting shut down so it can look for untrustworthy input values
+            service.io.startShutdownWindow();
+
+            // Send the reboot request
             powerdownWasSent = true;
             PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
             pm.reboot(null);

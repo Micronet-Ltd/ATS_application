@@ -298,9 +298,18 @@ public class MainService extends Service {
 
             } else if (shutdown_id == 1) {
                 Log.i(TAG, " (Started From System Shutdown)");
+                skipSetup = true; // we are trying to shut down, so we don't really need to setup.
+
                 //power.killService(); // can;t kill the process or the intent will just be redelivered
-                stopSelf(); // stop the service (this will call shutdown when OnDestroy is called)
-                return START_NOT_STICKY;
+                if ((SHOULD_SELF_DESTROY_ON_SHUTDOWN) ||   // we want to destroy the service when we get this
+                    (!isAlreadyRunning)) {   // we weren't already running, just destroy this service and ignore
+                    // Try to shut down this service
+                    stopSelf(); // stop the service (this will call shutdown when OnDestroy is called)
+                    return START_NOT_STICKY;
+                } else {
+                    // We need to start the shutdown timer, during which period we ignore erratic certain signals from Inputs
+                    io.startShutdownWindow();
+                }
 
             } else if (restart_id == 1) {
                 Log.i(TAG, " (Started From Process Killer)");
@@ -312,9 +321,11 @@ public class MainService extends Service {
                 }
             } else {
                 Log.i(TAG, " (Started From Other/Unknown Intent)");
-                // The service was started by another app (kiosk) or user
-                // we need to check for recent alarms, because we may have booted which then caused another app to start us.
-                checkRecentAlarms(); // we need to check for recent alarms
+                // If the service can be started by another app (such as kiosk) or user on boot,
+                // then we need to check for recent alarms, because we may have booted which then caused another app to start us.
+
+                // Since we are always registering to start on boot, we don't need to do this
+                // checkRecentAlarms(); // we need to check for recent alarms
 
             }
 
@@ -414,8 +425,8 @@ public class MainService extends Service {
             exec = null;
         }
 
-        power.stop(); // destroys wakelocks
-        io.stop(); // destroys wakelocks
+        power.stop(); // tears down FOTA windows
+        io.stop();  // tears down I/O polling
         ota.stop(); // tears down UDP
         queue.close(); // closes DB
 
