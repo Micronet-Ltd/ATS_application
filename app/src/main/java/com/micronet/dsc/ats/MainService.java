@@ -40,7 +40,7 @@ public class MainService extends Service {
 
     // Features that are likely to be removed later
     // Generally, these should always be true
-    public static final boolean SHOULD_ALLOW_INPUT6_AS_IGNITION = true; // allow input6 to take over as the ignition line
+    public static final boolean SHOULD_KEEP_SCREEN_ON = true; // always keep the screen on while running
 
     // Features that were previously disabled and now enabled again
     // Generally, these should always be true
@@ -301,14 +301,15 @@ public class MainService extends Service {
                 skipSetup = true; // we are trying to shut down, so we don't really need to setup.
 
                 //power.killService(); // can;t kill the process or the intent will just be redelivered
+
+                // We need to start the shutdown timer, during which period we ignore erratic certain signals from Inputs
+                io.startShutdownWindow();
+
                 if ((SHOULD_SELF_DESTROY_ON_SHUTDOWN) ||   // we want to destroy the service when we get this
                     (!isAlreadyRunning)) {   // we weren't already running, just destroy this service and ignore
                     // Try to shut down this service
                     stopSelf(); // stop the service (this will call shutdown when OnDestroy is called)
                     return START_NOT_STICKY;
-                } else {
-                    // We need to start the shutdown timer, during which period we ignore erratic certain signals from Inputs
-                    io.startShutdownWindow();
                 }
 
             } else if (restart_id == 1) {
@@ -425,7 +426,7 @@ public class MainService extends Service {
             exec = null;
         }
 
-        power.stop(); // tears down FOTA windows
+        power.stop(); // tears down FOTA windows and locks
         io.stop();  // tears down I/O polling
         ota.stop(); // tears down UDP
         queue.close(); // closes DB

@@ -328,25 +328,23 @@ public class Io {
 
     //////////////////////////////////////////////////////////
     // startShutdownWindow()
-    //  This was used when we thought there was a problem during shutdown for Inputs 4,5,6 during IO Scheme6
-    //  Turns out the problem occurred whenever the screen was off,
+    //  This is used b/c Analog Inputs report that they are being grounded for several seconds during shutdown
+    //  This also happens whenever the screen is off, which is why we try to keep the screen on.
 
     //  starts a window during which we expect the device to shutdown.
     //  during this portions of this period, we can't trust the results that we get from the Tri-state Inputs
     //  since they seem to return as ground even when they are not grounded for brief periods (seconds).
-
-
     //////////////////////////////////////////////////////////
     public void startShutdownWindow() {
 
-        /*
+
         Log.v(TAG, "startShutdownWindow()");
         if (mainHandler != null) { // we're not trying to call this before we called start on the I/O
             inShutdownWindow = true;
             mainHandler.removeCallbacks(shutdownWindowTask);
             mainHandler.postDelayed(shutdownWindowTask, SHUTDOWN_WINDOW_MS);
         }
-        */
+
     } // startShutdownWindow()
 
 
@@ -660,7 +658,7 @@ public class Io {
                         }
 
 
-                        /*
+
                         //
                         //
                         // TEMP: Disable Analog reading for Inputs 4, 5, 6 since it doesn't return correct value when screen is off
@@ -729,7 +727,7 @@ public class Io {
                         // END TEMP: Disable Analog Reading for Inputs 4,5,6
                         //
                         //
-                        */
+
                     } // analog inputs returned something
                 } // IO_SCHEME_6
 
@@ -794,7 +792,7 @@ public class Io {
 
                     if (
                         // TEMP: Disable Analog reading for Inputs 4, 5, 6 since it doesn't return correct value when screen is off
-                            (io_scheme == IO_SCHEME_6) || // read digital inputs for scheme 6.
+                            //(io_scheme == IO_SCHEME_6) || // read digital inputs for scheme 6.
                         // END TEMP: Disable Analog reading for Inputs 4, 5, 6 since it doesn't return correct value when screen is off
                             (io_scheme == IO_SCHEME_97) || (io_scheme==IO_SCHEME_A)) { //scheme A or scheme 97
                         // type  9 and  10 are read as digital inputs
@@ -1138,7 +1136,7 @@ public class Io {
 
         // The following was used before we decided to disable float-detection on IO Scheme 6.
 
-        /*
+
         // In Scheme 6, Inputs 4, 5 and 6 (the tri-state inputs) are untrustworthy if they report a ground during the shutdown window
         if (io_scheme == IO_SCHEME_6) {
             if (inShutdownWindow) {
@@ -1152,7 +1150,7 @@ public class Io {
 
             }
         }
-        */
+
 
     } // correctHardwareInputs()
 
@@ -1686,20 +1684,6 @@ public class Io {
                     }
                 }
 
-/*
-                // should we allow the use of input 6 as ignition line ?
-                // if voltage is detected on this line, then switch over
-                if (service.SHOULD_ALLOW_INPUT6_AS_IGNITION) {
-                    if ((input6) &&
-                            (!USE_INPUT6_AS_IGNITION)) {
-                        // once we detect a high level on input 6, then from this point forward use input 6 as ignition.
-                        Log.i(TAG, "Voltage sensed on IN6, IN6 will now be used as ignition line");
-                        USE_INPUT6_AS_IGNITION = true;
-                        input6 = false;
-                        service.state.writeState(State.FLAG_USING_INPUT6_AS_IGNITION, 1); // remember this
-                    }
-                }
-*/
 
                 // log the current state values for physical input once every 10 seconds
                 //counter++;

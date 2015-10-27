@@ -74,7 +74,11 @@ public class Power {
     // (wakelocks related to I/O are in the Io class file)
 
 
+    PowerManager.WakeLock screenlock = null; // this is a lock to hold the screen on
+
     boolean powerdownWasSent = false; // this will be set to true once we send a power-down request so only one will be sent
+
+    int initialStartUpTicks = 0; // number of seconds after starting during which Power Downs cannot be issued.
 
     public Power(MainService service) {
         this.service = service;
@@ -87,8 +91,17 @@ public class Power {
     //      Starts all monitoring (time changes, etc.), called when app is starting
     ////////////////////////////////////////////////////////////////////
     public void start() {
-        registerTimeChanges();
+
+        if (service.SHOULD_KEEP_SCREEN_ON)
+            acquireScreenLock();   // prevent the screen from sleeping
+
+        registerTimeChanges(); // register to receive time-change notifications
+
+
+        // get the number of seconds during which we should not power-down after startup
+        initialStartUpTicks = service.config.readParameterInt(Config.SETTING_POWER, Config.PARAMETER_INITIAL_KEEPAWAKE);
         exec = new ScheduledThreadPoolExecutor(1);
+        // Do not change this once second interval because it is used to determine initialStartupTicks
         exec.scheduleWithFixedDelay(new PowerDownTask(), 1000, 1000, TimeUnit.MILLISECONDS); // every 1 second, check if we should power down
 
 
@@ -126,6 +139,12 @@ public class Power {
     ////////////////////////////////////////////////////////////////////
     public void destroy() {
         // release all wakelocks
+
+        if (service.SHOULD_KEEP_SCREEN_ON) {
+            // if we turned on the screen, then we want to turn it off
+            releaseScreenLock();
+        }
+
         if (heartbeatWakeLock != null)
             heartbeatWakeLock = cancelWakeLock(WAKELOCK_HEARTBEAT_NAME, heartbeatWakeLock);
         if (scheduledWakeLock != null)
@@ -755,7 +774,8 @@ public class Power {
 
     /////////////////////////////////////////////////////////////////////////////////
     // isScreenOn()
-    //  checks whether screen is on. we do not normally power-down when screen is on
+    //  checks whether screen is on. 
+	//	This is Deprecated: We used to only power-down when screen is off
     /////////////////////////////////////////////////////////////////////////////////
     boolean isScreenOn() {
         PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
@@ -763,6 +783,36 @@ public class Power {
         // For API above 20:
         //return pm.isInteractive();
     }
+
+
+
+    /////////////////////////////////////////////////////////////////////////////////
+    // acquireScreenLock()
+    //  prevents the screen from turning off
+    /////////////////////////////////////////////////////////////////////////////////
+    void acquireScreenLock() {
+
+        PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
+
+        // SCREEN locks are deprecated after version 17
+        // cause the screen to turn on if it is not already on when we acquire the lock
+        screenlock = pm.newWakeLock((PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.SCREEN_DIM_WAKE_LOCK), "ATS-ScreenLock");
+        screenlock.acquire();
+
+    } // acquireScreenLock()
+
+    /////////////////////////////////////////////////////////////////////////////////
+    // releaseScreenLock()
+    //  allows the screen to turn off again
+    /////////////////////////////////////////////////////////////////////////////////
+    void releaseScreenLock() {
+        if (screenlock != null) {
+            screenlock.release();
+        }
+        screenlock = null;
+
+    } // releaseScreenLock()
+
 
 
     /////////////////////////////////////////////////////////////////////////////////
@@ -822,10 +872,24 @@ public class Power {
                 // checks to see if we should power down
 //                Log.v(TAG, "PowerDownTask()");
 
-                if ((!isScreenOn()) &&
-                   (!isWakeLockHeld())) {
-                    powerDown();
+				// Do not power down during the initial service start-up window.
+                if (initialStartUpTicks > 0) {
+                    initialStartUpTicks--;
+                    if (initialStartUpTicks == 0) {
+                        Log.v(TAG, "Start-up Window has expired.");
+                    }
+
                 }
+
+                if (initialStartUpTicks == 0) { // we are not in the startup window
+                    if ((service.SHOULD_KEEP_SCREEN_ON) || // if we are always keeping screen on
+                            (!isScreenOn())) { // or if screen is off
+                        // then we can power down when there are no wakelocks
+                        if (!isWakeLockHeld()) {
+                            powerDown();
+                        }
+                    } // screen is appropriate
+                } // not in startup window
 
             } catch (Exception e) {
                 Log.e(TAG + ".PowerDownTask()", "Exception: " + e.toString(), e);

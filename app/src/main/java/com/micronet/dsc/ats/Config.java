@@ -98,9 +98,10 @@ public class Config {
         public static final int PARAMETER_COMWATCHDOG_TIME1 = 0; // seconds
         public static final int PARAMETER_COMWATCHDOG_TIME2 = 1; // seconds
         public static final int PARAMETER_COMWATCHDOG_TIME3 = 2; // seconds
+    public static final int SETTING_POWER = 26;
+    public static final int PARAMETER_INITIAL_KEEPAWAKE = 0; // seconds
 
-
-    public static final int NUM_SETTINGS = 25;
+    public static final int NUM_SETTINGS = 26;
 
     public static final String[] SETTING_DEFAULTS = {
             "", // Reserved
@@ -128,7 +129,8 @@ public class Config {
             "200|20", // Cornering: cm/s^2, 1/10 seconds
             "0", // Do not send packets if cellular not active
             "1|20|40|0|0|0", // Input 6: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
-            "900|120|120"
+            "900|120|120", // server watchdog
+            "30" // initial keep-awake
     };
 
 
