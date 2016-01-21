@@ -212,16 +212,17 @@ public class Queue {
     ////////////////////////////////////
     // deleteItemBySequenceId() : 
     //		To be called when ACK is received, removes the item from queue
+    //  mask determines what portion of the sequence ID to treat as significant when making the comparison
     ////////////////////////////////////
-    public void deleteItemBySequenceId(long sequence_id) {
+    public void deleteItemBySequenceId(long sequence_id, long mask) {
 
         // we must only delete this item if it is the first item in the queue
         //  b/c there may be many messages in the queue with the same sequence ID (since sequence ID may reset)
 
         QueueItem item = getFirstItem();
         if ((item != null) &&
-            (item.sequence_id == sequence_id)) { // check if the first item has this sequence ID
-            Log.v(TAG, "Found Queue Item: seqnum: " + sequence_id + " , id: " + item.getId());
+            ((item.sequence_id & mask) == (sequence_id & mask))) { // check if the first item has this sequence ID
+            Log.v(TAG, "Found Queue Item: seqnum: " + item.sequence_id + ", id: " + item.getId());
             deleteItemByID(item.getId());
         } else if (item != null) {
             Log.v(TAG, "Queue Item seqnum no match, expected " + item.sequence_id + " received " + sequence_id );

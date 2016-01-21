@@ -506,7 +506,15 @@ public class MainService extends Service {
             // get the sequence ID to use.
             int seq = state.readState(State.COUNTER_MESSAGE_SEQUENCE_INDEX);
             item.sequence_id = seq;
-            state.writeState(State.COUNTER_MESSAGE_SEQUENCE_INDEX, seq + 1);
+
+            // Determine the next sequence ID
+            int new_sequence_id  = seq +1;
+            if ((new_sequence_id & Codec.SEQUENCE_ID_RECEIVE_MASK) == 0) {
+                // don't allow sequence IDs where the mask bits are all 0.
+                new_sequence_id++;
+            }
+            state.writeState(State.COUNTER_MESSAGE_SEQUENCE_INDEX, new_sequence_id);
+
 
             // save needed Information from time-of trigger
 
