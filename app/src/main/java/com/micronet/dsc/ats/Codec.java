@@ -12,6 +12,9 @@ public class Codec {
 
     public static final String TAG = "ATS-Codec"; // TAG used for logging
 
+    public static final int SEQUENCE_ID_RECEIVE_MASK = 0xFFFF; // these are the bits that we are capable of receiving for sequence ID
+                                                               // Used during message ACKs to determine if there is a sequence ID match
+
 	// Incoming/OutgoingMessage: contains the raw data for 
 	//	mobile-terminated (incoming) and mobile-originated (outgoing) messages
     public static final int MAX_INCOMING_MESSAGE_LENGTH = 100;

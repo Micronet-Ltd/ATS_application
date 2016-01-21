@@ -466,7 +466,7 @@ public class Ota {
             // process this ack
             // delete item at top of queue if if matches this ACK
             Log.v(TAG, "Processing message: ACK");
-            service.queue.deleteItemBySequenceId(item.sequence_id);
+            service.queue.deleteItemBySequenceId(item.sequence_id, Codec.SEQUENCE_ID_RECEIVE_MASK);
         } else
         //if (item.event_type_id == QueueItem.EVENT_TYPE_RESTART_IO) {
             //Log.d(TAG, "message is RESTART-IO");
