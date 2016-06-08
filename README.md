@@ -4,7 +4,7 @@ This repository contains 3 projects:
 
 1 ATS -- Android Telematics Service 
 
-2 VBS -- Vehicle Bus Service (talks to the VAN and J1708 buses)
+2 VBS -- Vehicle Bus Service (talks to the CAN and J1708 buses and forwards this info to ATS)
 
 3 testapps -- apps used for testing devices/bugs or functionality
 
