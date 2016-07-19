@@ -43,7 +43,7 @@ public class MainService extends Service {
     // Features that are likely to be removed later
     // Generally, these should always be true
     public static final boolean SHOULD_KEEP_SCREEN_ON = true; // always keep the screen on while running
-    public static final boolean SHOULD_AUTO_RESET_FOTA_AFTER_5_MINUTES = true; // send request to reset FOTA files after 5 minutes
+    public static final boolean SHOULD_AUTO_RESET_FOTA_AFTER_5_MINUTES = false; // send request to reset FOTA files after 5 minutes
 
 
     // Features that were previously disabled and now enabled again
