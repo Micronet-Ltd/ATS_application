@@ -43,7 +43,7 @@ public class CrashTest extends AndroidTestCase {
         assertFalse(cr.isRestoreable());
 
         cr.edit();
-        cr.editor.putLong("SaveTime", SystemClock.elapsedRealtime() + 10); // in future
+        cr.editor.putLong("SaveTime", SystemClock.elapsedRealtime() + 1000); // one second in future
         cr.editor.commit();
 
         assertFalse(cr.isRestoreable());

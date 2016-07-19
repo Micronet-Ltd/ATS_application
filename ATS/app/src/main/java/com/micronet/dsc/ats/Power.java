@@ -54,6 +54,10 @@ public class Power {
     private static final String WAKELOCK_HEARTBEAT_NAME = "ATS_HEARTBEAT";
     private static final String WAKELOCK_SCHEDULED_NAME = "ATS_SCHEDULEDWAKEUP";
 
+    // To start ResetRB:
+    private static final String PACKAGE_NAME_RESETRB = "com.micronet.dsc.resetrb";
+    private static final String EXTERNAL_BROADCAST_RESETRB = "com.micronet.dsc.resetRB.reset";
+
     MainService service; // contains the context
 
 
@@ -291,6 +295,7 @@ public class Power {
     //  Returns: false if it wasn't recent,
     //           true if it was recent (and therefore this boot may have been caused by alarm)
     ////////////////////////////////////////////////////////////////
+
     public boolean wasCurrentAlarmRecent(String alarmName) {
 
         long next_alarm_time_s = 0;
@@ -837,6 +842,12 @@ public class Power {
             service.io.startShutdownWindow();
             service.stopWatchdogService(); // stop the watchdog that restarts this service
 
+            // Trigger a message that we are going to do this.
+            Codec codec = new Codec(service);
+            int data = codec.dataForSystemShutdown(Codec.SHUTDOWN_REASON_ATS_SHUTDOWN);
+            service.addEventWithExtra(QueueItem.EVENT_TYPE_SHUTDOWN, data);
+
+
             // Send the power down request
             powerdownWasSent = true;
             PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
@@ -859,6 +870,12 @@ public class Power {
             // Let the IO module know we are requesting shut down so it can look for untrustworthy input values
             service.io.startShutdownWindow();
 
+            // Trigger a message that we are going to do this.
+            Codec codec = new Codec(service);
+            int data = codec.dataForSystemShutdown(Codec.SHUTDOWN_REASON_ATS_REBOOT);
+            service.addEventWithExtra(QueueItem.EVENT_TYPE_SHUTDOWN, data);
+
+
             // Send the reboot request
             powerdownWasSent = true;
             PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
@@ -867,6 +884,18 @@ public class Power {
     } // reboot()
 
 
+    /////////////////////////////////////////////////////////////////////////////////
+    // hasSentShutdown
+    //  have we sent the shutdown request?
+    //  used so that we don't send the request more than once, and so we know if a system shutdown notification wsa triggered by us
+    //      (so we dont trigger another message)
+    /////////////////////////////////////////////////////////////////////////////////
+    boolean hasSentShutdown() {
+        return powerdownWasSent;
+    }
+
+
+    ////////////////////////////////////////
     void saveRebootTime() {
         long time_last_booted_ms = System.currentTimeMillis() - SystemClock.elapsedRealtime();
         service.state.writeStateLong(State.LAST_BOOT_TIME, time_last_booted_ms);
@@ -1125,11 +1154,13 @@ public class Power {
     ////////////////////////////////////////////////////////////////
     public void openFOTAUpdateWindow(int seconds) {
 
-        // We should wait up to 30 minutes for cell coverage
-        // Send a redbend update request if coverage is attained in that time-period
+
 
         if (service.SHOULD_BROADCAST_REDBEND_ON_HEARTBEAT) {
             Log.i(TAG, "FOTA update window opened");
+
+            // We should wait up to 30 minutes for cell coverage
+            // Send a redbend update request if coverage is attained in that time-period
 
             if (mainHandler != null) {
                 // Set the timeout for how long we are allowed to check for updates
@@ -1253,6 +1284,26 @@ public class Power {
             }
         } // OnReceive()
     }; // redbendReceiver
+
+
+    ///////////////////////////////////////////////////////////////////
+    // resetFotaUpdater()
+    //  starts the external service "resetRB" which will delete redbend client data files as the system user.
+    //  this essentially factory resets the redbend client (the FOTA updater) app.
+    ///////////////////////////////////////////////////////////////////
+
+    public void resetFotaUpdater() {
+
+        Log.i(TAG, " Sending FOTA reset request (starting resetRB service) " + EXTERNAL_BROADCAST_RESETRB);
+        // send out the ping to ATS
+
+        Intent serviceIntent = new Intent();
+        serviceIntent.setPackage(PACKAGE_NAME_RESETRB);
+        serviceIntent.setAction(EXTERNAL_BROADCAST_RESETRB);
+
+        service.context.startService(serviceIntent);
+
+    } // resetFotaUpdater()
 
 
 } // class

@@ -1,11 +1,12 @@
 <resources>
 
     <!-- Base application theme. -->
-    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+    <style name="AppTheme" parent="android:style/Theme.Holo.Light">
+    <!--<style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar"> -->
         <!-- Customize your theme here. -->
     </style>
 
-    <style name="AppTranslucent" parent="Theme.AppCompat">
+    <style name="AppTranslucent" parent="android:style/Theme.Holo">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:colorBackgroundCacheHint">@null</item>

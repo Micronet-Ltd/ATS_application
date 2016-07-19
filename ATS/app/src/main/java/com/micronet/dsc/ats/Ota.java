@@ -929,6 +929,12 @@ public class Ota {
             service.queue.clearAll();
             sendAck(server_number, item);
         } else
+
+        if (item.event_type_id == EventType.EVENT_TYPE_RESET_FOTA_UPDATER) {
+            Log.v(TAG, "Processing message: RESET-FOTA-UPDATER");
+            service.power.resetFotaUpdater();
+            sendAck(item);
+        } else
         if (item.event_type_id == EventType.EVENT_TYPE_CLEAR_ODOMETER) {
             Log.v(TAG, "Processing message: CLEAR-ODOMETER");
             service.position.clearOdometer();

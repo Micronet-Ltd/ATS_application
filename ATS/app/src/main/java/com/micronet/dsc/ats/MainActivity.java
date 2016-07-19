@@ -1,5 +1,6 @@
 package com.micronet.dsc.ats;
 
+import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
@@ -7,7 +8,7 @@ import android.content.res.Resources;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.StrictMode;
-import android.support.v7.app.ActionBarActivity;
+//import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
@@ -25,7 +26,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.TimeZone;
 
-public class MainActivity extends ActionBarActivity {
+public class MainActivity extends Activity {
 
     public static final String TAG = "ATS-Activity";
 

@@ -44,16 +44,9 @@ public class CodecTest extends AndroidTestCase {
     }
 
 
-    public void test_encode() {
 
-
-
-
-        QueueItem queueItem = new QueueItem();
+    private Ota.ConnectInfo setupDefaultConnectInfo() {
         Ota.ConnectInfo connectInfo = new Ota.ConnectInfo();
-
-        Codec.OutgoingMessage message;
-
 
         connectInfo.isRoaming = false;
         connectInfo.networkOperator = "246824";
@@ -62,7 +55,13 @@ public class CodecTest extends AndroidTestCase {
         connectInfo.phoneType = TelephonyManager.PHONE_TYPE_GSM;
         connectInfo.signalStrength = -93; // Ota.convertGSMStrengthtoDBM(10);
 
-        // For saved carrier info
+        return connectInfo;
+
+    }
+
+    private QueueItem setupDefaultQueueItem(Ota.ConnectInfo connectInfo) {
+        QueueItem queueItem = new QueueItem();
+
         queueItem.signal_strength = (byte) connectInfo.signalStrength;
         queueItem.network_type = (byte) connectInfo.networkType;
         queueItem.is_roaming = connectInfo.isRoaming;
@@ -86,11 +85,12 @@ public class CodecTest extends AndroidTestCase {
         queueItem.speed = 3576; // 3,576 cm/s = 80 mph
         queueItem.heading = 313;
 
-        message = codec.encodeMessage(queueItem, connectInfo);
+        return queueItem;
+    }
 
-        // Here are the expected results:
 
-        byte[] expectedMessage = {
+
+    byte[] defaultExpectedMessage = {
             8,                // length of device ID
             48, 48, 48, 48, 48, 48, 48, 48,  // device ID
             (byte) 0x80,                // requires an ACK, application source ID = 0
@@ -111,10 +111,24 @@ public class CodecTest extends AndroidTestCase {
             5,                // satelite count
             (byte) 0xA4, 0x7C, 0x22, 0x20, // odom
             (byte) 0xC3, 0x01 // idle
-        };
+    };
 
-        assertEquals(expectedMessage.length, message.length);
-        assertEquals(Arrays.toString(expectedMessage), Arrays.toString(Arrays.copyOf(message.data, message.length)));
+
+    public void test_encode() {
+
+
+        Codec.OutgoingMessage message;
+
+        //setup
+        Ota.ConnectInfo connectInfo = setupDefaultConnectInfo();
+        QueueItem queueItem = setupDefaultQueueItem(connectInfo);
+
+        ////////////////////////////////////
+        // encode a basic (default) message
+        message = codec.encodeMessage(queueItem, connectInfo);
+
+        assertEquals(defaultExpectedMessage.length, message.length);
+        assertEquals(Arrays.toString(defaultExpectedMessage), Arrays.toString(Arrays.copyOf(message.data, message.length)));
 
         ////////////////////////////////////
         // now add  re-mapping and re-encode
@@ -122,10 +136,84 @@ public class CodecTest extends AndroidTestCase {
 
         message = codec.encodeMessage(queueItem, connectInfo);
 
-        expectedMessage[12] = (byte) 0x99;
+        defaultExpectedMessage[12] = (byte) 0x99;
 
-        assertEquals(expectedMessage.length, message.length);
-        assertEquals(Arrays.toString(expectedMessage), Arrays.toString(Arrays.copyOf(message.data, message.length)));
+        assertEquals(defaultExpectedMessage.length, message.length);
+        assertEquals(Arrays.toString(defaultExpectedMessage), Arrays.toString(Arrays.copyOf(message.data, message.length)));
+
+        ////////////////////////////////////
+        // try the system boot message, since it contains more data
+
+        queueItem.event_type_id = QueueItem.EVENT_TYPE_REBOOT;
+        Codec codec = new Codec(service);
+        queueItem.extra = codec.dataForSystemBoot(7); // boot_reason
+
+        message = codec.encodeMessage(queueItem, connectInfo);
+
+        defaultExpectedMessage[12] = (byte) QueueItem.EVENT_TYPE_REBOOT;
+
+        byte[] expectedRebootData = {
+            0x03, 0x00,
+            0x07,  // io_boot_reason
+            (byte) 0x98, 0x00 // current build version
+        };
+
+        byte[] expectedData = expectedRebootData;
+        assertEquals(defaultExpectedMessage.length + expectedData.length, message.length);
+        assertEquals(Arrays.toString(defaultExpectedMessage), Arrays.toString(Arrays.copyOf(message.data, defaultExpectedMessage.length)));
+        assertEquals(Arrays.toString(expectedData), Arrays.toString(Arrays.copyOfRange(message.data, message.length-expectedData.length, message.length)));
+
+
+        ////////////////////////////////////
+        // try the system restart message, since it contains more data
+
+        queueItem.event_type_id = QueueItem.EVENT_TYPE_RESTART;
+        codec = new Codec(service);
+        queueItem.extra = BuildConfig.VERSION_CODE;
+
+        message = codec.encodeMessage(queueItem, connectInfo);
+
+        defaultExpectedMessage[12] = (byte) QueueItem.EVENT_TYPE_RESTART;
+
+        byte[] expectedRestartData = {
+                0x02, 0x00,
+                (byte) 0x98, 0x00 // current build version
+        };
+
+        expectedData = expectedRestartData;
+        assertEquals(defaultExpectedMessage.length + expectedData.length, message.length);
+        assertEquals(Arrays.toString(defaultExpectedMessage), Arrays.toString(Arrays.copyOf(message.data, defaultExpectedMessage.length)));
+        assertEquals(Arrays.toString(expectedData), Arrays.toString(Arrays.copyOfRange(message.data, message.length-expectedData.length, message.length)));
+
+
+
+        ////////////////////////////////////
+        // try the system shutdown message, since it contains more data
+
+        // 07/18/2016 @ 7:19pm (UTC)
+        // = 1468869546 seconds
+        // = 24481159.1 minutes = x01758D87
+        service.state.writeStateLong(State.NEXT_HEARTBEAT_TIME_S, 1468869546L);
+
+
+        queueItem.event_type_id = QueueItem.EVENT_TYPE_SHUTDOWN;
+        codec = new Codec(service);
+        queueItem.extra = codec.dataForSystemShutdown(3); // shutdown_reason
+
+        message = codec.encodeMessage(queueItem, connectInfo);
+
+        defaultExpectedMessage[12] = (byte) QueueItem.EVENT_TYPE_SHUTDOWN;
+
+        byte[] expectedShutdownData = {
+                0x05, 0x00,
+                0x03,  // shutdown_reason
+                (byte) 0x87, (byte) 0x8D, 0x75, 0x1
+        };
+
+        expectedData = expectedShutdownData;
+        assertEquals(defaultExpectedMessage.length + expectedData.length, message.length);
+        assertEquals(Arrays.toString(defaultExpectedMessage), Arrays.toString(Arrays.copyOf(message.data, defaultExpectedMessage.length)));
+        assertEquals(Arrays.toString(expectedData), Arrays.toString(Arrays.copyOfRange(message.data, message.length-expectedData.length, message.length)));
 
 
     } // test_encode()
@@ -181,5 +269,35 @@ public class CodecTest extends AndroidTestCase {
 
     } // test_decode()
 
+
+
+    public void test_dataForSystemBoot() {
+
+
+        int build_code = 152;
+        //build_code = BuildConfig.VERSION_CODE;
+
+        // 152 = x0098
+
+        Codec codec = new Codec(service);
+        int data = codec.dataForSystemBoot(7);
+
+        assertEquals(0x009807, data);
+
+    }
+
+    public void test_dataForSystemShutdown() {
+
+        // 07/18/2016 @ 7:19pm (UTC)
+        // = 1468869546 seconds
+        // = 24481159.1 minutes = x01758D87
+        service.state.writeStateLong(State.NEXT_HEARTBEAT_TIME_S, 1468869546L);
+
+        Codec codec = new Codec(service);
+        int data = codec.dataForSystemShutdown(2);
+
+        assertEquals(0x21758D87, data);
+
+    }
 
 } // CodecTest

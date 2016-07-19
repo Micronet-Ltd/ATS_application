@@ -86,7 +86,8 @@ public class Crash {
 
         if ((saved > 0) &&
             (saved <= now) &&
-            (saved + MAX_ELAPSED_RESTORE_TIME_MS >  SystemClock.elapsedRealtime())) {
+            //(saved + MAX_ELAPSED_RESTORE_TIME_MS >  SystemClock.elapsedRealtime())) {
+                (saved + MAX_ELAPSED_RESTORE_TIME_MS >  now)) {
             return true;
         }
 

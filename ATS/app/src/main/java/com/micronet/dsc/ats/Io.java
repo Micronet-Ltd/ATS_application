@@ -32,17 +32,18 @@ public class Io {
     public static final int INPUT_BITVALUE_IGNITION = 1; // the bit value in the inputs_bitfield of the ignition bit
     // gp Inputs are hardcoded to = 1 << input number (e.g. Input#2 = 1 << 2 = value of 4)
 
-
     public static final String DEFAULT_SERIAL_NUMBER = "00000000"; // used if we can't determine the serial number of device
 
 
 
     //private static boolean USE_INPUT6_AS_IGNITION = false; // are we currently using input6 as the ignition line?
+
 /*
     static final int HW_INPUT_LOW = 0; //
     static final int HW_INPUT_HIGH = 1; //
     static final int HW_INPUT_FLOAT = -1; // for ints: 0 will me low, 1 will me high and this will mean float
     static final int HW_INPUT_UNKNOWN = -2; // could not determine a value for the input
+
 */
 
     public static boolean DEFAULT_ALWAYS_OVERRIDE = false; // always use the defaults and ignore the actual hardware states
@@ -70,6 +71,7 @@ public class Io {
     //volatile boolean ioTaskRunning = false;
     //volatile long lastIoTaskAttemptTime = 0;
 
+
     //////////////////////////////////////////
     // Variables for the safety shutdown window during which we don't fully trust the input values
 
@@ -80,9 +82,7 @@ public class Io {
     //////////////////////////////////////////
     // Variables to store info from the Hardware API so we can segregate all calling into monitored threads
 
-
     int ioServiceProcessId = 0; // process of the hardware service (non-zero means it is valid)
-
     public class DeviceConstants {
         String deviceId = DEFAULT_SERIAL_NUMBER; // stores the serial-number (ID) of the device that will be used in OTA.
         int deviceBootCapturedInputs = 0;       // stores the boot-captures flags of the inputs during boot
@@ -101,7 +101,6 @@ public class Io {
     }
     Status status = new Status(); // just to make passing these variables around easier
     //long savedPhysicalElapsedTime = 0;
-
 
 
     private int debounceIgnition, debounceBadAlternator, debounceLowBattery; //counters for when debouncing
@@ -171,7 +170,6 @@ public class Io {
     } // Io()
 
 
-
     ////////////////////////////////////////////////////////////////////
     // start()
     //      "Start" the I/O monitoring, called when app is started
@@ -185,8 +183,6 @@ public class Io {
 
 
         mainHandler  = new Handler();
-
-
 
         // register the Init receiver
         IntentFilter intentFilterInit = new IntentFilter();
@@ -214,6 +210,7 @@ public class Io {
         InitTask initTask = new InitTask();
         Thread initThread = new Thread(initTask);
         initThread.start();
+
 */
     } // start()
 
@@ -234,7 +231,6 @@ public class Io {
             service.engine.start(deviceConstants.deviceId);
         }
     } // finishStart()
-
     ////////////////////////////////////////////////////////////////////
     // stop()
     //      "Stop" the I/O monitoring, called when app is ended
@@ -259,7 +255,6 @@ public class Io {
         } catch (Exception e) {
             // not an issue, this can happen if they weren't registered
         }
-
 
         //stopSensor();
 
@@ -289,7 +284,7 @@ public class Io {
     } // destroy()
 
 
-    ////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////
     // saveCrashData()
     //      save data in preparation for an imminent crash+recovery
     ////////////////////////////////////////////////////////////////////
@@ -415,6 +410,7 @@ public class Io {
         watchdog_IoPollTask = false; // reset so that we are ready to check again.
         return false; // no error
     } // isWatchdogError
+
 */
 
 
@@ -431,8 +427,6 @@ public class Io {
             Log.e(TAG, "Exception populateQueueItem() " + e.toString(), e);
         }
     }
-
-
     ////////////////////////////////////////////////////////////////////
     // getStatus()
     //  called everytime we need a status snapshot of relevant parameters (like for a local broadcast)
@@ -440,7 +434,6 @@ public class Io {
     public Status getStatus() {
         return status;
     }
-
 
 
     //  *************************************************
@@ -474,6 +467,8 @@ public class Io {
     public int getBootState() {
         return deviceConstants.deviceBootCapturedInputs;
     }
+
+
 
 
 
@@ -553,7 +548,6 @@ public class Io {
 
                     int seconds_wake = service.config.readParameterInt(Config.SETTING_INPUT_IGNITION, Config.PARAMETER_INPUT_IGNITION_SECONDS_WAKE);
 
-
                     // set the fact that ignition is off
 
                     status.input_bitfield &= ~INPUT_BITVALUE_IGNITION;
@@ -573,11 +567,9 @@ public class Io {
                         Log.i(TAG, "Engine Status Off");
                         status.flagEngineStatus = false;
                         service.state.writeState(State.FLAG_ENGINE_STATUS, 0); // remember this
-
                         service.addEvent(EventType.EVENT_TYPE_ENGINE_STATUS_OFF);
 
                         service.engine.turnEngineOn(false); // used to start fuel updates, etc..
-
                     }
 
                     // stop Idling (if needed) since engine status is now off
@@ -593,7 +585,6 @@ public class Io {
                 } else { // ignition was off
 
                     Log.i(TAG, "Ignition On");
-
 
                     // set a wake lock b/c we need to make sure that we keep awake until we have time to execute the ignition-off code
 
@@ -612,7 +603,6 @@ public class Io {
 
                     // Start the location information
                     service.position.start();
-
                     service.engine.start(deviceConstants.deviceId); // start engine monitoring
 
                 } // ignition was off
@@ -642,7 +632,6 @@ public class Io {
 
             if ((status.battery_voltage > status_volt_threshold_tenths) ||
                 (service.DEBUG_IO_IGNORE_VOLTAGE_FOR_ENGINE_STATUS)) {
-
                 Log.i(TAG, "Engine Status On");
                 status.flagEngineStatus = true;
                 service.state.writeState(State.FLAG_ENGINE_STATUS, 1); // remember this
@@ -657,13 +646,10 @@ public class Io {
                         service.addEventWithData(EventType.EVENT_TYPE_ENGINE_STATUS_ON, codec.dataForEngineOn());
                     } else {
                         mainHandler.postDelayed(delayedEngineOnTask, ENGINE_ON_TRIGGER_DELAY_MS);
-                    }
-
-
+                }
                 }
 
                 service.engine.turnEngineOn(true); // turn off fuel updates, etc..
-
             }
         }
 
@@ -716,12 +702,10 @@ public class Io {
 
                 if (status.flagBadAlternator) {
                     Log.i(TAG, "Bad Alternator On (" + (voltage / 10.0) + "V)");
-
                     service.addEvent(EventType.EVENT_TYPE_BAD_ALTERNATOR_ON);
                     service.state.writeState(State.FLAG_BADALTERNATOR_STATUS, 1); // remember this
                 } else {
                     Log.i(TAG, "Bad Alternator Off (" + (voltage / 10.0) + "V)");
-
                     service.addEvent(EventType.EVENT_TYPE_BAD_ALTERNATOR_OFF);
                     service.state.writeState(State.FLAG_BADALTERNATOR_STATUS, 0); // remember this
                 }
@@ -767,12 +751,10 @@ public class Io {
 
                 if (status.flagLowBattery) {
                     Log.i(TAG, "Low Battery On (" + (voltage / 10.0) + "V)");
-
                     service.addEvent(EventType.EVENT_TYPE_LOW_BATTERY_ON);
                     service.state.writeState(State.FLAG_LOWBATTERY_STATUS, 1); // remember this
                 } else {
                     Log.i(TAG, "Low Battery Off ("  + (voltage / 10.0) + "V)");
-
                     service.addEvent(EventType.EVENT_TYPE_LOW_BATTERY_OFF);
                     service.state.writeState(State.FLAG_LOWBATTERY_STATUS, 0); // remember this
                 }
@@ -898,11 +880,9 @@ public class Io {
                 flagInput = !flagInput;
                 status.input_bitfield ^= (1 << input_num);
 
-
                 if (flagInput) {
                     Log.i(TAG, "Input " + input_num + " On");
-
-                    service.addEvent(event_on_id);
+                        service.addEvent(event_on_id);
                     service.state.writeState(state_id, 1); // remember this
 
 
@@ -916,8 +896,8 @@ public class Io {
 
                 } else {
                     Log.i(TAG, "Input " + input_num + " Off");
+                        service.addEvent(event_off_id);
 
-                    service.addEvent(event_off_id);
                     service.state.writeState(state_id, 0); // remember this
 
                     // start the reset period before we can turn back logically on
@@ -941,32 +921,6 @@ public class Io {
     } // checkDigitalInput()
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     //  *************************************************
     //  Methods for async tasks (Init and polling)
     //  *************************************************
@@ -985,14 +939,12 @@ public class Io {
 
     } // parseReceivedHardwareInit
 
-
     //////////////////////////////////////////////////////////
     // InitReceiver()
     //   this task must complete before I/O is "ready" to be used
     //   gets vital things like the Serial Number of the device
     //      and battery voltage to include in messages
     //////////////////////////////////////////////////////////
-
     IoInitReceiver ioInitReceiver = new IoInitReceiver();
     class IoInitReceiver extends BroadcastReceiver {
 
@@ -1003,11 +955,9 @@ public class Io {
         @Override
         public void onReceive(Context context, Intent intent)
         {
-
             try {
 
                 Log.vv(TAG, "initTask()");
-
 
                 // This may just be a process Id
                 int processId = intent.getIntExtra("processId", 0);
@@ -1030,21 +980,18 @@ public class Io {
 
                 deviceConstants.deviceId = getHardwareDeviceId();
                 deviceConstants.deviceBootCapturedInputs = getHardwareBootState();
-
-
-
-
                 // set the initial physical voltage value .. this is needed to be put into messages
                 HardwareVoltageResults hardwareVoltageResults = getHardwareVoltageOnly();
                 if (hardwareVoltageResults  != null)
                     setVoltageInput(hardwareVoltageResults.voltage);
+
 */
 
-                    // We don't need to set other input states, as these are logical (and came from the state xml file).
-                    // In fact, we should NOT set them, otherwise any transitions from file will not be detected
+                // We don't need to set other input states, as these are logical (and came from the state xml file).
+                // In fact, we should NOT set them, otherwise any transitions from file will not be detected
 
-                    // mark this init as completed (it's ok the send messages now)
-                    deviceConstants.isValid = true;
+                // mark this init as completed (it's ok the send messages now)
+                deviceConstants.isValid = true;
 
                     if (finish) { // finish starting this io
                         finishStart();
@@ -1062,9 +1009,10 @@ public class Io {
                 // schedule the I/O poller
                 if (!service.isUnitTesting) {
 					// We dont want to start separate threads when we are unit testing
-                    exec = new ScheduledThreadPoolExecutor(1);
-                    int pollperiodms = INPUT_POLL_PERIOD_TENTHS * 100;
-                    exec.scheduleAtFixedRate(new IoPollTask(), pollperiodms, pollperiodms, TimeUnit.MILLISECONDS); // check levels
+                exec = new ScheduledThreadPoolExecutor(1);
+                int pollperiodms = INPUT_POLL_PERIOD_TENTHS * 100;
+                exec.scheduleAtFixedRate(new IoPollTask(), pollperiodms, pollperiodms, TimeUnit.MILLISECONDS); // check levels
+
                 }
                 */
 
@@ -1109,7 +1057,6 @@ public class Io {
         @Override
         public void onReceive(Context context, Intent intent)
         {
-
             try {
                 Log.vv(TAG, "ioInputReceiver()");
 
@@ -1126,7 +1073,6 @@ public class Io {
 
                 IoService.HardwareInputResults hardwareInputResults = parseReceivedHardwareInputs(intent);
 
-
                 double voltage_input;
                 boolean ignition_input, ignition_valid;
                 int input1, input2, input3, input4, input5, input6;
@@ -1140,12 +1086,10 @@ public class Io {
                 input4 = (DEFAULT_INPUT4_STATE ? 1 : 0);
                 input5 = (DEFAULT_INPUT5_STATE ? 1 : 0);
                 input6 = (DEFAULT_INPUT6_STATE ? 1 : 0);
-
                 //lastIoTaskAttemptTime = SystemClock.elapsedRealtime();
                 //ioTaskRunning = true;
 
                 //HardwareVoltageResults hardwareVoltageResults = getHardwareVoltage();
-
                 //ioTaskRunning = false;
 
                 // take into account the state of the application to correct any values we don't trust
@@ -1205,7 +1149,6 @@ public class Io {
                     checkDigitalInput(6, input6);
 
 
-
                 //watchdog_IoPollTask = true; // successfully completed
             } catch (Exception e) {
                 Log.e(TAG, "IoPollReceiver Exception " + e.toString(), e);
@@ -1214,7 +1157,6 @@ public class Io {
 
         } // onReceive()
     } // IoPollReceiver()
-
 
 
     private Runnable delayedEngineOnTask  = new Runnable() {
@@ -1248,9 +1190,6 @@ public class Io {
             }
         }
     }; // shutdownWindowTask()
-
-
-
     long getLastIoReceiptTime() {
         return lastIoReceived;
     }

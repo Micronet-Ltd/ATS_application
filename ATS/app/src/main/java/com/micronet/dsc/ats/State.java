@@ -57,6 +57,7 @@ public class State {
 
     public static final int COUNTER_MESSAGE_SEQUENCE_INDEX = 100;
     public static final int NEXT_HEARTBEAT_TIME_S = 101;  // for checking at boot if it could have been caused by heartbeat
+                                                          // also used to place data in shutdown message
     public static final int NEXT_SCHEDULEDWAKEUP_TIME_S = 102;  // for checking at boot if it could have been caused by heartbeat
     public static final int LAST_BOOT_TIME = 103; // for saving the time of last boot to determine if we rebooted
     public static final int ENGINE_WARM_START = 104; // for saving whether we've already gotten engine info since last reboot
@@ -67,6 +68,9 @@ public class State {
     public static final int J1939_BUS_ADDRESS = 111;
 
 
+
+
+    public static final int VERSION_SPECIFIC_CODE = 200; // can be used to see if we executed code needed to run once for this version
 
     Context context;
     SharedPreferences sharedPref;

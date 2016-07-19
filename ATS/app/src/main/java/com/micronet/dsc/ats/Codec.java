@@ -30,6 +30,11 @@ public class Codec {
         byte[] data = new byte[MAX_OUTGOING_MESSAGE_LENGTH];
     }
 
+    // Define various Shutdown Reasons that can be sent by this application to the server
+    public static final int SHUTDOWN_REASON_ATS_SHUTDOWN = 1; // system is being shut down by ATS
+    public static final int SHUTDOWN_REASON_ATS_REBOOT = 2; // system is being rebooted by ATS
+    public static final int SHUTDOWN_REASON_SYS_SHUTDOWN = 3; // system is being shut down by the system (outside ATS)
+
 
 	// Define various NAKs that can be sent by this application to the server
     public static final int NAK_UNKNOWN_COMMAND = 1;
@@ -324,8 +329,9 @@ public class Codec {
 
             int data_length = queueItem.additional_data_bytes.length;
             message.data[index] = (byte) (data_length & 0xFF);
-            message.data[index+1] = (byte) ((data_length >>8) & 0xFF);
+            message.data[index + 1] = (byte) ((data_length >> 8) & 0xFF);
             index += FIELD_LENGTH_DATA_LENGTH;
+
 
             for (i = 0 ; i < data_length; i++) {
                 if (index+i < MAX_OUTGOING_MESSAGE_LENGTH) // safety
@@ -341,22 +347,48 @@ public class Codec {
 
             // TODO: THIS IS DEPRECATED way of storing the queue item .. remove this in a few versions
             //  (after there are no more items in existing queues that require it)
-            if ((queueItem.event_type_id == EventType.EVENT_TYPE_REBOOT) ||
-                    (queueItem.event_type_id == EventType.EVENT_TYPE_ERROR)) {
+
+            int data_length = 0;
+            if (queueItem.event_type_id == QueueItem.EVENT_TYPE_ERROR) {
                 // add one more byte (either the wakeup reason or the error reason) to the message
-                int data_length = 1; // one more byte of data
+                data_length = 1; // one more byte of data
+            } else if (queueItem.event_type_id == QueueItem.EVENT_TYPE_RESTART) {
+                data_length = 2; // two more bytes of data
+            } else if (queueItem.event_type_id == QueueItem.EVENT_TYPE_REBOOT) {
+                data_length = 3; // three more bytes of data
+            } else if (queueItem.event_type_id == QueueItem.EVENT_TYPE_SHUTDOWN) {
+                data_length = 5; // five more bytes of data
+            }
+
+
+
+            if (data_length > 0) {
                 message.data[index] = (byte) (data_length & 0xFF);
                 message.data[index+1] = (byte) ((data_length >>8) & 0xFF);
                 index += FIELD_LENGTH_DATA_LENGTH;
+            }         
+       
+            int extra = queueItem.extra;
 
-                message.data[index] = (byte) (queueItem.extra & 0xFF);
-                index += data_length;
+            if (queueItem.event_type_id == QueueItem.EVENT_TYPE_SHUTDOWN) {
+                // take the high 4 bits as the reason for the shutdown
+                //  and insert that value
+                int reason = (extra & 0xF0000000) >>> 28;
+                extra &= 0x0FFFFFFF;
+                message.data[index] = (byte) reason;
+                index +=1;
+                data_length--;
+            }
 
-            } // EVENT_TYPE_REBOOT
 
+            while (data_length > 0) {
+                message.data[index] = (byte) (extra & 0xFF);
+                index += 1;
+                data_length--;
+                extra >>=8;
+            }
 
         } // additional data was null
-        
 
         message.length = index;
 
@@ -629,5 +661,70 @@ public class Codec {
         return encodeDataAllFuel();
     } // dataForFuelStatus()
 
+   // dataForSystemBoot()
+    // returns 3 bytes of data for inclusion in System Boot message
+    public static byte[] dataForSystemBoot(int io_boot_state) {
 
-    } // Codec class
+        byte[] data = new byte[3];
+
+        // [0] = boot reason
+        // [1..2] = ATS version code
+
+        int i = BuildConfig.VERSION_CODE;
+                
+        data[0] = (io_boot_state & 0xFF);     
+        data[1] = (i & 0xFF);
+        i >>=8;
+        data[2] = (i & 0xFF);
+        
+
+        return data;
+
+    } // dataForSystemBoot()
+
+    // dataForSystemShutdown
+    // returns 5 bytes for inclusion on System Shutdown message
+    // temporarily maps this into a 4 byte int for 1.5 version compatibility
+    public byte[] dataForSystemShutdown(int shutdown_reason) {
+
+        // [0]  high 4 bits = shutdown reason (1 = ATS Shutdown, 2 = ATS reboot, 3 = System Shutdown Notification)
+        // [0] Low nibble and [1.. 3] = L.E. time of next scheduled heartbeat in minutes since unix epoch
+
+        byte data[] = new byte[5];
+
+        data[0] = (byte) shutdown_reason;
+
+        long next_alarm_time_m = service.state.readStateLong(State.NEXT_HEARTBEAT_TIME_S) / 60;
+
+        data[1] = (byte) (next_alarm_time_m & 0xFF);
+        next_alarm_time_m >>>= 8;
+        data[2] = (byte) (next_alarm_time_m & 0xFF);
+        next_alarm_time_m >>>= 8;
+        data[3] = (byte) (next_alarm_time_m & 0xFF);
+        next_alarm_time_m >>>= 8;
+        data[4] = (byte) (next_alarm_time_m & 0xFF);
+
+        return data;
+
+
+/*
+        int i;
+
+        i = unsigned(data[0])  & 0x0F; // high nibble
+        i <<= 4;
+        i |= unsigned(data[4]) & 0x0F; // low nibble
+        i <<= 8;
+        i |= unsigned(data[3]);
+        i <<= 8;
+        i |= unsigned(data[2]);
+        i <<= 8;
+        i |= unsigned(data[1]);
+
+        return i;
+*/
+    } // dataForShutdown()
+
+
+
+
+} // Codec class

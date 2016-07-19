@@ -5,6 +5,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.content.Context;
 
@@ -24,7 +25,7 @@ import android.os.SystemClock;
 public class MainService extends Service {
 
     /////////////////////////////////////
-    // Global Configuration constants used during release an debugging.
+    // Global Configuration constants used during release and debugging.
     //
 
     // Enable/Disable Features that were added or removed after the project started
@@ -37,14 +38,17 @@ public class MainService extends Service {
     //  Generally, these should always be false unless they are requested again:
     public static final boolean SHOULD_WRITE_FAKE_CONFIGURATION_XML = false; // Write fake entry #0 to configuration files to make sure they exist
     public static final boolean SHOULD_SELF_DESTROY_ON_SHUTDOWN = false; // the service should try to kill itself when OS is shutting down, before the OS does it.
+    public static final boolean SHOULD_BROADCAST_REDBEND_ON_HEARTBEAT = false; // send broadcast to redbend on heartbeat
 
     // Features that are likely to be removed later
     // Generally, these should always be true
     public static final boolean SHOULD_KEEP_SCREEN_ON = true; // always keep the screen on while running
+    public static final boolean SHOULD_AUTO_RESET_FOTA_AFTER_5_MINUTES = true; // send request to reset FOTA files after 5 minutes
+
 
     // Features that were previously disabled and now enabled again
     // Generally, these should always be true
-    public static final boolean SHOULD_BROADCAST_REDBEND_ON_HEARTBEAT = true; // send broadcast to redbend on heartbeat
+
 
 
 
@@ -191,6 +195,8 @@ public class MainService extends Service {
             power.setScheduledWakeLock(keepawake_sec);
 
         }
+
+
     } // checkRecentAlarms()
 
     @Override
@@ -291,6 +297,7 @@ public class MainService extends Service {
             final int restart_id = intent.getIntExtra(Power.ALARM_RESTART_NAME, 0);
             final int ping_id = intent.getIntExtra(ExternalReceiver.EXTERNAL_BROADCAST_PING, 0);
             final int payload_id = intent.getIntExtra(ExternalReceiver.EXTERNAL_SEND_PAYLOAD, 0);
+            final int resetrb_id = intent.getIntExtra(ExternalReceiver.EXTERNAL_BROADCAST_RESETRB_REPLY, 0);
 
             if (heartbeat_id == 1) {
                 // this was started by a heartbeat alarm, we want to acquire a lock and trigger an event
@@ -305,7 +312,7 @@ public class MainService extends Service {
 
                     addEvent(EventType.EVENT_TYPE_HEARTBEAT);
 
-                    power.openFOTAUpdateWindow(keepawake_sec);
+                    power.openFOTAUpdateWindow(keepawake_sec); // will open window if build option is set
                 }
             } else if (scheduled_id == 1) {
                 // this was started by a scheduled wakeup alarm, we want to acquire a lock
@@ -351,8 +358,10 @@ public class MainService extends Service {
                 if (io.isFullyInitialized())
                     io_boot_state = io.getBootState();
                 else
-                    io_boot_state = -1; // record this event anywaymark this as an error, unable to determine state
-                addEventWithExtra(EventType.EVENT_TYPE_REBOOT, io_boot_state); // system booted
+                    io_boot_state = -1; // record this event anyway, mark this as an error, unable to determine state
+                
+                int data = Codec.dataForSystemBoot(io_boot_state);
+                addEventWithExtra(QueueItem.EVENT_TYPE_REBOOT, data); // system booted
 
                 // check to see if this could have been caused by a heartbeat
                 // if it could have been caused by heartbeat, then send the heartbeat alarm.
@@ -371,6 +380,14 @@ public class MainService extends Service {
                 // We need to start the shutdown timer, during which period we ignore erratic certain signals from Inputs
                 io.startShutdownWindow();
                 stopWatchdogService(); // stop any watchdogs we have running on this service
+
+                // We should trigger a message unless we already know we are shutting down
+                if (!power.hasSentShutdown()) {
+                    Codec codec = new Codec(this);
+                    int data = codec.dataForSystemShutdown(Codec.SHUTDOWN_REASON_SYS_SHUTDOWN);
+                    addEventWithExtra(QueueItem.EVENT_TYPE_SHUTDOWN, data);
+                }
+
 
                 if ((SHOULD_SELF_DESTROY_ON_SHUTDOWN) ||   // we want to destroy the service when we get this
                     (!isAlreadyRunning)) {   // we weren't already running, just destroy this service and ignore
@@ -391,7 +408,13 @@ public class MainService extends Service {
                         addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_EXTERNAL_WATCHDOG);
                     }
                 }
+            } else if (resetrb_id == 1) {
+                // This can happen frequently, so don't spend time reseting alarms or foreground, etc unless needed
+                skipSetup = true;
 
+                Log.v(TAG, " (Started From ResetRB FOTA Updater ACK)");
+                addEvent(QueueItem.EVENT_TYPE_RESET_FOTA_UPDATER);
+            
             } else if (ping_id == 1) {
 
                 //skipSetup = true;
@@ -435,7 +458,6 @@ public class MainService extends Service {
 
         if (!isAlreadyRunning) {
             // first time starting after loading
-
             isAlreadyRunning = true; // remember for next time we are already running
         } else { // we were already running
 
@@ -445,7 +467,7 @@ public class MainService extends Service {
 
         if (doTriggerRestartEvent) {
             clearEventSequenceIdIfNeeded();
-            addEvent(EventType.EVENT_TYPE_RESTART); // service restarted
+            addEventWithExtra(QueueItem.EVENT_TYPE_RESTART, BuildConfig.VERSION_CODE); // service restarted
         }
 
 
@@ -457,6 +479,8 @@ public class MainService extends Service {
 				// Don't start other threads when unit testing
 
                 startWatchdogThread();
+
+                setAutoFotaResetIfNeeded();
             }
         }
 
@@ -716,8 +740,46 @@ public class MainService extends Service {
 
     } // clearSequenceIdIfNeeded()
 
+    //////////////////////////////////////////////////////////////
+    // setAutoFotaResetIfNeeded()
+    //  This will try to auto reset the redbend FOTA by clearing out data files
+    //  It does this immediately if it is more than 5 minutes after boot, or sets a timer to do this at 5 minutes after boot.
+    //////////////////////////////////////////////////////////////
+    public void setAutoFotaResetIfNeeded() {
+        if (SHOULD_AUTO_RESET_FOTA_AFTER_5_MINUTES) {
+
+            int version = state.readState(State.VERSION_SPECIFIC_CODE);
+
+            if (version == BuildConfig.VERSION_CODE) {
+                Log.d(TAG, "No Auto FOTA Reset needed (already ran after install)");
+                return; // already executed code for this version
+            }
+
+            // If we are more than 5 minutes past boot, execute our version specific code, otherwise set the time to execute
+
+            long elapsed_ms = SystemClock.elapsedRealtime(); // time since boot
+
+            long schedule_in_ms = 300000 - elapsed_ms; // how long until 300 seconds after boot ?
+
+            if (schedule_in_ms <= 500) schedule_in_ms = 500; // 500 ms from now minimum (if we are close to our past 300 seconds from boot)
+
+            Log.d(TAG, "Scheduling Auto FOTA Reset for " + schedule_in_ms + " ms from now");
+            exec.schedule(new VersionSpecificTask(), schedule_in_ms, TimeUnit.MILLISECONDS);
 
 
+        }
+    } // setAutoFotaResetIfNeeded()
+
+
+    class VersionSpecificTask implements Runnable {
+        @Override
+        public void run() {
+            power.resetFotaUpdater();
+
+            // mark this as done so we don't do it again.
+            state.writeState(State.VERSION_SPECIFIC_CODE, BuildConfig.VERSION_CODE);
+        } // run
+    }
 
 
 

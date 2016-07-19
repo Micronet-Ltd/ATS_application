@@ -50,8 +50,10 @@
             android:name=".ExternalReceiver"
             android:enabled="true" >
             <intent-filter>
+
                 <action android:name="com.micronet.dsc.ats.ping" />
                 <action android:name="com.micronet.dsc.ats.server.send" />
+                <action android:name="com.micronet.dsc.resetRB.replyReset"/>
             </intent-filter>
         </receiver>
 
@@ -75,7 +77,7 @@
             android:enabled="true"
             android:exported="false"
             android:process=":io" >
-             />
+             
         </service>
 
         <receiver
