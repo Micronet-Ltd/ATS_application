@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.micronet.dsc.ats" >
+
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SET_TIME" />
+    <uses-permission android:name="android.permission.REBOOT" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme" >
+        <activity
+            android:name=".MainActivity"
+            android:label="@string/app_name"
+            android:theme="@style/AppTranslucent"
+            >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+
+        <service
+            android:name=".MainService"
+            android:enabled="true"
+            android:exported="false" >
+        </service>
+
+
+        <receiver android:name=".AlarmReceiver"
+            android:enabled="true"
+            >
+            <intent-filter>
+                <action android:name="com.micronet.dsc.ats.alarm"/>
+                <action android:name="com.micronet.dsc.ats.scheduledwakeup"/>
+                <action android:name="com.micronet.dsc.ats.restartservice"/>
+            </intent-filter>
+        </receiver>
+
+        <receiver android:name=".ExternalReceiver"
+            android:enabled="true"
+            >
+            <intent-filter>
+                <action android:name="com.micronet.dsc.ats.ping"/>
+                <action android:name="com.micronet.dsc.resetRB.replyReset"/>
+            </intent-filter>
+        </receiver>
+
+
+        <!-- Start the Service on boot -->
+
+        <receiver android:name=".BootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
+
+
+        <!-- Stop the service if applicable on shutdown -->
+        <receiver android:name=".ShutdownReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.ACTION_SHUTDOWN"/>
+            </intent-filter>
+        </receiver>
+
+
+
+    </application>
+
+</manifest>
