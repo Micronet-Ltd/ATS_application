@@ -1,0 +1,33 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sharedUserId="android.uid.system"
+    package="com.micronet.dsc.resetrb">
+
+    <permission android:name="com.micronet.dsc.resetRB.resetClient" android:label="Reset Redbend Client" android:protectionLevel="signature"/>
+
+    <uses-permission android:name="com.micronet.dsc.resetRB.resetClient" />
+
+
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+
+
+        <service
+            android:name=".ResetRBService"
+            android:enabled="true"
+            >
+            <intent-filter>
+                <action android:name="com.micronet.dsc.resetRB.reset" />
+            </intent-filter>
+        </service>
+
+
+
+    </application>
+
+</manifest>

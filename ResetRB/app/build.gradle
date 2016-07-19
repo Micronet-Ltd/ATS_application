@@ -1,0 +1,43 @@
+apply plugin: 'com.android.application'
+
+android {
+    signingConfigs {
+        a300keys
+    }
+
+    compileSdkVersion 23
+    buildToolsVersion "21.1.2"
+
+    defaultConfig {
+        applicationId "com.micronet.dsc.resetrb"
+        minSdkVersion 15
+        targetSdkVersion 23
+        versionCode 1
+        versionName "1.0"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.a300keys
+        }
+        debug {
+            signingConfig signingConfigs.a300keys
+        }
+
+    }
+}
+
+dependencies {
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+    testCompile 'junit:junit:4.12'
+    compile 'com.android.support:appcompat-v7:23.4.0'
+}
+
+
+def props = new Properties()
+props.load(new FileInputStream(rootProject.file("a300keys.properties")))
+android.signingConfigs.a300keys.storeFile rootProject.file(props.keyStore)
+android.signingConfigs.a300keys.storePassword props.keyStorePassword
+android.signingConfigs.a300keys.keyAlias props.keyAlias
+android.signingConfigs.a300keys.keyPassword props.keyAliasPassword
