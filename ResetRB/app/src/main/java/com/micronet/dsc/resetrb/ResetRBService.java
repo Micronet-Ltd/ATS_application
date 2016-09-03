@@ -1,7 +1,9 @@
 /////////////////////////////////////////////////////////////
-// VBusService:
-//  Handles communications with hardware regarding CAN and J1708
-//  can be started in a separate process (since interactions with the API are prone to jam or crash -- and take down the whole process when they do)
+// ResetRBService:
+//  Handles requests to this service from other applications like ATS
+//  supports a PING, or a request to clear the redbend files
+//
+//  This is organized as a service, although it could have been organized as broadcast receivers
 /////////////////////////////////////////////////////////////
 
 package com.micronet.dsc.resetrb;
@@ -16,14 +18,20 @@ import android.util.Log;
 
 public class ResetRBService extends Service {
 
-    public static final String TAG = "ATS-RRS";
+    public static final String TAG = "ResetRB-Service";
 
 
     public static final String PACKAGE_NAME_ATS = "com.micronet.dsc.ats";
-    public static final String SERVICE_ACTION_RESET = "com.micronet.dsc.resetRB.reset";
+    public static final String START_SERVICE_ACTION_PING = "com.micronet.dsc.resetRB.ping";
+    public static final String START_SERVICE_ACTION_RESET = "com.micronet.dsc.resetRB.reset";
+    public static final String START_SERVICE_ACTION_SETPERIOD = "com.micronet.dsc.resetRB.setUnlockPeriod";
 
     public static final String BROADCAST_RESPONSE_RESET = "com.micronet.dsc.resetRB.replyReset";
+    public static final String BROADCAST_RESPONSE_PING = "com.micronet.dsc.resetRB.replyPing";
 
+
+    public static final String ACTION_EXTRA_START_TOD_S = "startSecondsAfterLocalMidnight"; // number of seconds after local time's midnight to start allowing Installation
+    public static final String ACTION_EXTRA_END_TOD_S = "endSecondsAfterLocalMidnight"; // number of seconds after local time's midnight to stop allowing Installation
 
     public ResetRBService() {
     }
@@ -58,13 +66,35 @@ public class ResetRBService extends Service {
 
         action = intent.getAction();
 
-        if (action.equals(ResetRBService.SERVICE_ACTION_RESET)) {
+        if (action.equals(ResetRBService.START_SERVICE_ACTION_RESET)) {
             android.util.Log.i(TAG, "Reseting Redbend Client ");
 
-            clearRedbendFiles();
-            broadcastReply();
+            RBCClearer.clearRedbendFiles();
+            broadcastResetReply();
 
         }
+        else
+        if (action.equals(ResetRBService.START_SERVICE_ACTION_PING)) {
+            android.util.Log.i(TAG, "Received Ping ");
+            broadcastPingReply();
+        }
+        else
+        if (action.equals(ResetRBService.START_SERVICE_ACTION_SETPERIOD)) {
+            android.util.Log.i(TAG, "Received Set Installation Unlock Period ");
+
+
+            int start_tod_s_local = intent.getIntExtra(ACTION_EXTRA_START_TOD_S, -1);
+            int end_tod_s_local = intent.getIntExtra(ACTION_EXTRA_END_TOD_S, -1);
+
+
+            Context context = getApplicationContext();
+            if (0 == InstallationLocks.setUnlockTimePeriod(context, start_tod_s_local, end_tod_s_local)) {
+                broadcastPingReply();
+            }
+
+        }
+
+
 
         stopSelf();
         return START_NOT_STICKY;
@@ -85,42 +115,7 @@ public class ResetRBService extends Service {
     } // OnDestroy()
 
 
-
-
-    //////////////////////////////////////////////////////////////////
-    // clearRedbendFiles()
-    //  clears out the rebend client files required to reset the client
-    //  /data/misc/rb/* and /data/data/com.redbend.client
-    //////////////////////////////////////////////////////////////////
-    void clearRedbendFiles() {
-
-        Log.d(TAG, "Clearing redbend client files");
-        // since this has a wildcard it must be run in a shell
-
-        String command = "";
-
-        command = "rm -r /data/misc/rb/*";
-        Log.d(TAG, "Running " + command);
-
-        try {
-            Runtime.getRuntime().exec(new String[] { "sh", "-c", command } ).waitFor();
-        } catch (Exception e) {
-            Log.d(TAG, "Exception exec: " + command + ": " + e.getMessage());
-        }
-
-        command = "pm clear com.redbend.client";
-        Log.d(TAG, "Running " + command);
-
-        try {
-            Runtime.getRuntime().exec(command).waitFor();
-        } catch (Exception e) {
-            Log.d(TAG, "Exception exec " + command + ": " +  e.getMessage());
-        }
-
-    } // clearRedbendFiles
-
-
-    void broadcastReply() {
+    void broadcastResetReply() {
 
         Context context = getApplicationContext();
 
@@ -135,6 +130,21 @@ public class ResetRBService extends Service {
 
         //ibroadcast.putExtra("processId", processId); // so this can be killed?
 
+
+        context.sendBroadcast(ibroadcast);
+
+    } // broadcastReply()
+
+
+    void broadcastPingReply() {
+
+        Context context = getApplicationContext();
+
+        Intent ibroadcast = new Intent();
+        //ibroadcast.setPackage(PACKAGE_NAME_ATS);
+        ibroadcast.setAction(BROADCAST_RESPONSE_PING);
+
+        ibroadcast.putExtra("version", BuildConfig.VERSION_NAME);
 
         context.sendBroadcast(ibroadcast);
 

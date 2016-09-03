@@ -16,6 +16,8 @@
         android:theme="@style/AppTheme">
 
 
+        <!-- Service receives requests from other apps like ATS -->
+        <!-- DS 2016-08-31: We should require the above permission in order to use this service, since it will be system app, this app can create the permission first -->
 
         <service
             android:name=".ResetRBService"
@@ -23,8 +25,35 @@
             >
             <intent-filter>
                 <action android:name="com.micronet.dsc.resetRB.reset" />
+                <action android:name="com.micronet.dsc.resetRB.ping" />
+                <action android:name="com.micronet.dsc.resetRB.setUnlockPeriod" />
             </intent-filter>
         </service>
+
+
+        <!-- Receives events that mean the installation locks should be re-calculated -->
+        <receiver android:name=".InstallationLocksReceiver"
+            android:enabled="true"
+            >
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="com.micronet.dsc.resetRB.alarm.relockInstall"/>
+                <action android:name="android.intent.action.TIME_SET"/>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
+            </intent-filter>
+        </receiver>
+
+
+        <!-- Receives messages from the Redbend Client itself, containing its version, etc. -->
+        <receiver android:name=".RBCReceiver"
+            android:enabled="true"
+            >
+            <intent-filter>
+                <action android:name="com.redbend.client.micronet.STARTING"/>
+            </intent-filter>
+        </receiver>
+
+
 
 
 
