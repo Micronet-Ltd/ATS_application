@@ -16,6 +16,7 @@ public class EventType {
     public static int EVENT_TYPE_REBOOT = 5; // System has booted and started the service
     public static int EVENT_TYPE_RESTART = 6; // Service was started and was not already running
     public static int EVENT_TYPE_WAKEUP = 7; // System was sleeping or execution was paused.
+    public static int EVENT_TYPE_SHUTDOWN = 8; // System is going into shutdown
 
     public static int EVENT_TYPE_HEARTBEAT = 10;
     public static int EVENT_TYPE_PING = 11;
@@ -82,6 +83,7 @@ public class EventType {
     public static int EVENT_TYPE_CLEAR_QUEUE = 110; // configuration write
     public static int EVENT_TYPE_CLEAR_ODOMETER = 120; // configuration write
 
+    public static int EVENT_TYPE_RESET_FOTA_UPDATER = 125; // clear the FW update files for redbend client (requires resetRB apk)
 
 
     public static int EVENT_TYPE_TEST = 200; // just a blank / test message

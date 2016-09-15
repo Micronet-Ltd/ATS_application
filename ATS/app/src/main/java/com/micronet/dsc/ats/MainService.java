@@ -360,8 +360,8 @@ public class MainService extends Service {
                 else
                     io_boot_state = -1; // record this event anyway, mark this as an error, unable to determine state
                 
-                int data = Codec.dataForSystemBoot(io_boot_state);
-                addEventWithExtra(QueueItem.EVENT_TYPE_REBOOT, data); // system booted
+                byte[] data = Codec.dataForSystemBoot(io_boot_state);
+                addEventWithData(EventType.EVENT_TYPE_REBOOT, data); // system booted
 
                 // check to see if this could have been caused by a heartbeat
                 // if it could have been caused by heartbeat, then send the heartbeat alarm.
@@ -384,8 +384,8 @@ public class MainService extends Service {
                 // We should trigger a message unless we already know we are shutting down
                 if (!power.hasSentShutdown()) {
                     Codec codec = new Codec(this);
-                    int data = codec.dataForSystemShutdown(Codec.SHUTDOWN_REASON_SYS_SHUTDOWN);
-                    addEventWithExtra(QueueItem.EVENT_TYPE_SHUTDOWN, data);
+                    byte[] data = codec.dataForSystemShutdown(Codec.SHUTDOWN_REASON_SYS_SHUTDOWN);
+                    addEventWithData(EventType.EVENT_TYPE_SHUTDOWN, data);
                 }
 
 
@@ -410,16 +410,20 @@ public class MainService extends Service {
                 }
             } else if (resetrb_id == 1) {
                 // This can happen frequently, so don't spend time reseting alarms or foreground, etc unless needed
-                skipSetup = true;
+                if (!isAlreadyRunning) { // don't clutter logs up
+                    Log.v(TAG, " (Started From ResetRB FOTA Updater ACK)");
+                } else {
+                    // This can happen frequently, so don't spend time reseting alarms or foreground, etc unless needed
+                    doRegularSetup = false;
+                }
 
-                Log.v(TAG, " (Started From ResetRB FOTA Updater ACK)");
-                addEvent(QueueItem.EVENT_TYPE_RESET_FOTA_UPDATER);
+                addEvent(EventType.EVENT_TYPE_RESET_FOTA_UPDATER);
             
             } else if (ping_id == 1) {
 
                 //skipSetup = true;
                 if (!isAlreadyRunning) { // don't clutter logs up
-                    Log.v(TAG, " (Started From Externa)");
+                    Log.v(TAG, " (Started From External Ping)");
                 } else {
                     // This can happen frequently, so don't spend time reseting alarms or foreground, etc unless needed
                     doRegularSetup = false;
@@ -435,7 +439,7 @@ public class MainService extends Service {
                     doRegularSetup = false;
                 }
 
-            byte[] payload = intent.getByteArrayExtra(ExternalReceiver.EXTERNAL_SEND_PAYLOAD_DATA_PAYLOAD);
+                byte[] payload = intent.getByteArrayExtra(ExternalReceiver.EXTERNAL_SEND_PAYLOAD_DATA_PAYLOAD);
 
                 if ((payload.length > 0) && (payload.length <= ExternalReceiver.MAX_PAYLOAD_DATA_SIZE)) { // safety
                     addEventWithData(EventType.EVENT_TYPE_CUSTOM_PAYLOAD, payload);
@@ -467,7 +471,8 @@ public class MainService extends Service {
 
         if (doTriggerRestartEvent) {
             clearEventSequenceIdIfNeeded();
-            addEventWithExtra(QueueItem.EVENT_TYPE_RESTART, BuildConfig.VERSION_CODE); // service restarted
+            byte[] data = Codec.dataForServiceRestart();
+            addEventWithData(EventType.EVENT_TYPE_RESTART, data); // service restarted
         }
 
 

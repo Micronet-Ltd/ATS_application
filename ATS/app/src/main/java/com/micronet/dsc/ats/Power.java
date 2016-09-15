@@ -844,8 +844,8 @@ public class Power {
 
             // Trigger a message that we are going to do this.
             Codec codec = new Codec(service);
-            int data = codec.dataForSystemShutdown(Codec.SHUTDOWN_REASON_ATS_SHUTDOWN);
-            service.addEventWithExtra(QueueItem.EVENT_TYPE_SHUTDOWN, data);
+            byte data[] = codec.dataForSystemShutdown(Codec.SHUTDOWN_REASON_ATS_SHUTDOWN);
+            service.addEventWithData(EventType.EVENT_TYPE_SHUTDOWN, data);
 
 
             // Send the power down request
@@ -872,8 +872,8 @@ public class Power {
 
             // Trigger a message that we are going to do this.
             Codec codec = new Codec(service);
-            int data = codec.dataForSystemShutdown(Codec.SHUTDOWN_REASON_ATS_REBOOT);
-            service.addEventWithExtra(QueueItem.EVENT_TYPE_SHUTDOWN, data);
+            byte[] data = codec.dataForSystemShutdown(Codec.SHUTDOWN_REASON_ATS_REBOOT);
+            service.addEventWithData(EventType.EVENT_TYPE_SHUTDOWN, data);
 
 
             // Send the reboot request

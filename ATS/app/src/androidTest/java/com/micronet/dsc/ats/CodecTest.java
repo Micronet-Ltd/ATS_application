@@ -12,6 +12,11 @@ public class CodecTest extends AndroidTestCase {
     private Codec codec;
 
 
+    // Set these two values to be equal to the ATS build version for protocol testing
+    // ATS 2.3.0 = 230
+    static final byte ATS_VERSION_LSB = (byte) 230;
+    static final byte ATS_VERSION_MSB = (byte) 0;
+
     public void setUp(){
         RenamingDelegatingContext context
                 = new RenamingDelegatingContext(getContext(), "test_");
@@ -144,18 +149,18 @@ public class CodecTest extends AndroidTestCase {
         ////////////////////////////////////
         // try the system boot message, since it contains more data
 
-        queueItem.event_type_id = QueueItem.EVENT_TYPE_REBOOT;
+        queueItem.event_type_id = EventType.EVENT_TYPE_REBOOT;
         Codec codec = new Codec(service);
-        queueItem.extra = codec.dataForSystemBoot(7); // boot_reason
+        queueItem.additional_data_bytes = codec.dataForSystemBoot(7); // boot_reason
 
         message = codec.encodeMessage(queueItem, connectInfo);
 
-        defaultExpectedMessage[12] = (byte) QueueItem.EVENT_TYPE_REBOOT;
+        defaultExpectedMessage[12] = (byte) EventType.EVENT_TYPE_REBOOT;
 
         byte[] expectedRebootData = {
             0x03, 0x00,
             0x07,  // io_boot_reason
-            (byte) 0x98, 0x00 // current build version
+            ATS_VERSION_LSB, ATS_VERSION_MSB
         };
 
         byte[] expectedData = expectedRebootData;
@@ -167,17 +172,17 @@ public class CodecTest extends AndroidTestCase {
         ////////////////////////////////////
         // try the system restart message, since it contains more data
 
-        queueItem.event_type_id = QueueItem.EVENT_TYPE_RESTART;
+        queueItem.event_type_id = EventType.EVENT_TYPE_RESTART;
         codec = new Codec(service);
-        queueItem.extra = BuildConfig.VERSION_CODE;
+        queueItem.additional_data_bytes = codec.dataForServiceRestart(); // boot_reason
 
         message = codec.encodeMessage(queueItem, connectInfo);
 
-        defaultExpectedMessage[12] = (byte) QueueItem.EVENT_TYPE_RESTART;
+        defaultExpectedMessage[12] = (byte) EventType.EVENT_TYPE_RESTART;
 
         byte[] expectedRestartData = {
                 0x02, 0x00,
-                (byte) 0x98, 0x00 // current build version
+                ATS_VERSION_LSB, ATS_VERSION_MSB // current build version, set these appropriately
         };
 
         expectedData = expectedRestartData;
@@ -196,13 +201,13 @@ public class CodecTest extends AndroidTestCase {
         service.state.writeStateLong(State.NEXT_HEARTBEAT_TIME_S, 1468869546L);
 
 
-        queueItem.event_type_id = QueueItem.EVENT_TYPE_SHUTDOWN;
+        queueItem.event_type_id = EventType.EVENT_TYPE_SHUTDOWN;
         codec = new Codec(service);
-        queueItem.extra = codec.dataForSystemShutdown(3); // shutdown_reason
+        queueItem.additional_data_bytes = codec.dataForSystemShutdown(3); // shutdown_reason
 
         message = codec.encodeMessage(queueItem, connectInfo);
 
-        defaultExpectedMessage[12] = (byte) QueueItem.EVENT_TYPE_SHUTDOWN;
+        defaultExpectedMessage[12] = (byte) EventType.EVENT_TYPE_SHUTDOWN;
 
         byte[] expectedShutdownData = {
                 0x05, 0x00,
@@ -280,9 +285,16 @@ public class CodecTest extends AndroidTestCase {
         // 152 = x0098
 
         Codec codec = new Codec(service);
-        int data = codec.dataForSystemBoot(7);
+        byte[] data = codec.dataForSystemBoot(7);
 
-        assertEquals(0x009807, data);
+
+
+        // ATS Version = 2.3.0 = 230
+        //  you must set these last two bytes to be the correct version
+        byte[] expected = {7, ATS_VERSION_LSB, ATS_VERSION_MSB};
+
+        assertEquals(expected.length, data.length);
+        assertEquals(Arrays.toString(expected), Arrays.toString(data));
 
     }
 
@@ -294,9 +306,12 @@ public class CodecTest extends AndroidTestCase {
         service.state.writeStateLong(State.NEXT_HEARTBEAT_TIME_S, 1468869546L);
 
         Codec codec = new Codec(service);
-        int data = codec.dataForSystemShutdown(2);
+        byte[] data = codec.dataForSystemShutdown(2);
 
-        assertEquals(0x21758D87, data);
+        byte[] expected = {0x2, (byte) 0x087, (byte) 0x8D, 0x75, 0x1};
+
+        assertEquals(expected.length, data.length);
+        assertEquals(Arrays.toString(expected), Arrays.toString(data));
 
     }
 

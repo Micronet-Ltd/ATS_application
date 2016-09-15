@@ -349,14 +349,14 @@ public class Codec {
             //  (after there are no more items in existing queues that require it)
 
             int data_length = 0;
-            if (queueItem.event_type_id == QueueItem.EVENT_TYPE_ERROR) {
+            if (queueItem.event_type_id == EventType.EVENT_TYPE_ERROR) {
                 // add one more byte (either the wakeup reason or the error reason) to the message
                 data_length = 1; // one more byte of data
-            } else if (queueItem.event_type_id == QueueItem.EVENT_TYPE_RESTART) {
+            } else if (queueItem.event_type_id == EventType.EVENT_TYPE_RESTART) {
                 data_length = 2; // two more bytes of data
-            } else if (queueItem.event_type_id == QueueItem.EVENT_TYPE_REBOOT) {
+            } else if (queueItem.event_type_id == EventType.EVENT_TYPE_REBOOT) {
                 data_length = 3; // three more bytes of data
-            } else if (queueItem.event_type_id == QueueItem.EVENT_TYPE_SHUTDOWN) {
+            } else if (queueItem.event_type_id == EventType.EVENT_TYPE_SHUTDOWN) {
                 data_length = 5; // five more bytes of data
             }
 
@@ -370,7 +370,7 @@ public class Codec {
        
             int extra = queueItem.extra;
 
-            if (queueItem.event_type_id == QueueItem.EVENT_TYPE_SHUTDOWN) {
+            if (queueItem.event_type_id == EventType.EVENT_TYPE_SHUTDOWN) {
                 // take the high 4 bits as the reason for the shutdown
                 //  and insert that value
                 int reason = (extra & 0xF0000000) >>> 28;
@@ -661,8 +661,31 @@ public class Codec {
         return encodeDataAllFuel();
     } // dataForFuelStatus()
 
-   // dataForSystemBoot()
+
+
+    ///////////////////////////////////////////////////
+    // dataForServiceRestart()
+    // returns 2 bytes of data for inclusion in System Boot message
+    ///////////////////////////////////////////////////
+    public static byte[] dataForServiceRestart() {
+
+        byte[] data = new byte[2];
+
+        // [0..1] = ATS version code
+
+        int i = BuildConfig.VERSION_CODE;
+        data[0] = (byte) (i & 0xFF);
+        i >>=8;
+        data[1] = (byte) (i & 0xFF);
+
+        return data;
+    }
+
+
+    ///////////////////////////////////////////////////
+    // dataForSystemBoot()
     // returns 3 bytes of data for inclusion in System Boot message
+    ///////////////////////////////////////////////////
     public static byte[] dataForSystemBoot(int io_boot_state) {
 
         byte[] data = new byte[3];
@@ -672,19 +695,20 @@ public class Codec {
 
         int i = BuildConfig.VERSION_CODE;
                 
-        data[0] = (io_boot_state & 0xFF);     
-        data[1] = (i & 0xFF);
+        data[0] = (byte) (io_boot_state & 0xFF);
+        data[1] = (byte) (i & 0xFF);
         i >>=8;
-        data[2] = (i & 0xFF);
+        data[2] = (byte) (i & 0xFF);
         
 
         return data;
 
     } // dataForSystemBoot()
 
+    ///////////////////////////////////////////////////
     // dataForSystemShutdown
     // returns 5 bytes for inclusion on System Shutdown message
-    // temporarily maps this into a 4 byte int for 1.5 version compatibility
+    ///////////////////////////////////////////////////
     public byte[] dataForSystemShutdown(int shutdown_reason) {
 
         // [0]  high 4 bits = shutdown reason (1 = ATS Shutdown, 2 = ATS reboot, 3 = System Shutdown Notification)
@@ -706,22 +730,6 @@ public class Codec {
 
         return data;
 
-
-/*
-        int i;
-
-        i = unsigned(data[0])  & 0x0F; // high nibble
-        i <<= 4;
-        i |= unsigned(data[4]) & 0x0F; // low nibble
-        i <<= 8;
-        i |= unsigned(data[3]);
-        i <<= 8;
-        i |= unsigned(data[2]);
-        i <<= 8;
-        i |= unsigned(data[1]);
-
-        return i;
-*/
     } // dataForShutdown()
 
 
