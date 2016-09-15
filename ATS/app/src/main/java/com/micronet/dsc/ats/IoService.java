@@ -728,7 +728,9 @@ public class IoService extends Service {
 
         int boot_input_mask = HardwareWrapper.getPowerUpIgnitionState();
 
-        if (boot_input_mask != -1) { // not an error
+        if (boot_input_mask == -1) { // error
+            Log.e(TAG, "Unable to get PowerUpIgnitionState");
+        } else {
             // DEAL with IGNITION CONCURRENCY PROBLEM:
             if ((boot_input_mask & 0x0E) != 0) { // INPUT1,2, or 3 was the cause
                 boot_input_mask &= 0x0E; // We cannot say for sure that Ignition was also a cause

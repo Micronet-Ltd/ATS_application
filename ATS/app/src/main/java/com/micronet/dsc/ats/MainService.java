@@ -341,27 +341,9 @@ public class MainService extends Service {
                 // We need to trigger a BOOT EVENT, which requires us to know the boot-capture input states
                 //  since these are included in the event.
                 // The boot-capture input states are determined asynchronously in case they jam
-                //  so we must wait a reasonable amount of time.
-                // After the time-out, we should record the event anyway but mark the boot state as indeterminate
+                //  so we must wait a reasonable amount of time for this info
 
-                while ((!io.isFullyInitialized()) &&
-                        (SystemClock.elapsedRealtime() - createdElapsedTime < 2500)) {
-                    try {
-                        Thread.sleep(50);
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error in Thread.sleep(50)");
-                    }
-                }
-
-                int io_boot_state;
-
-                if (io.isFullyInitialized())
-                    io_boot_state = io.getBootState();
-                else
-                    io_boot_state = -1; // record this event anyway, mark this as an error, unable to determine state
-                
-                byte[] data = Codec.dataForSystemBoot(io_boot_state);
-                addEventWithData(EventType.EVENT_TYPE_REBOOT, data); // system booted
+                sendBootMessageAfterTimeout();
 
                 // check to see if this could have been caused by a heartbeat
                 // if it could have been caused by heartbeat, then send the heartbeat alarm.
@@ -598,7 +580,7 @@ public class MainService extends Service {
     } // shutdownService()
 
 
-    public void setForeground() {
+    void setForeground() {
 
         Intent myIntent = new Intent(context, MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(
@@ -627,13 +609,30 @@ public class MainService extends Service {
     }
 
 
+    //////////////////////////////////////////////////////////////////
+    // initExec()
+    /// initialize the exec variable if it is not already
+    //////////////////////////////////////////////////////////////////
+    private void initExec() {
+        if (exec == null)
+            exec = new ScheduledThreadPoolExecutor(1);
+
+    }
+
+
+
+    /////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////
+    //  Queuing of Messages
+
 
     ////////////////////////////////////
     // queueEventWithData() : Add an event to the end of the queue
     //      creates the item from the given event_type_id,
     //  sets the trigger time and other data to now
     ////////////////////////////////////
-    public void queueEventWithData(int event_type_id, byte[] data) {
+    void queueEventWithData(int event_type_id, byte[] data) {
 
         try {
             int i;
@@ -724,10 +723,10 @@ public class MainService extends Service {
 
 
     ////////////////////////////////////
-    // clearEventSequenceId() :
+    // clearEventSequenceIdNow() :
     //  Resets the Message Sequence ID to 0
     ////////////////////////////////////
-    public void clearEventSequenceId() {
+    void clearEventSequenceIdNow() {
         state.writeState(State.COUNTER_MESSAGE_SEQUENCE_INDEX, 0);
     } // clearEventSequenceId()
 
@@ -737,20 +736,31 @@ public class MainService extends Service {
     //  Reset the Message Sequence ID to 0, but only if the build constant is set
     //  this gets called at every wake-up
     ////////////////////////////////////
-    public void clearEventSequenceIdIfNeeded() {
+    void clearEventSequenceIdIfNeeded() {
 
         // if we have our build flag to reset the sequence ID when waking, then do that now
         if (SHOULD_RESET_SEQ_ON_WAKE)
-            clearEventSequenceId();
+            clearEventSequenceIdNow();
 
     } // clearSequenceIdIfNeeded()
+
+
+
+
+    /////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////
+    //  Version Specific stuff like FOTA reset
+    //      this is only executed for certain ATS versions
+
+
 
     //////////////////////////////////////////////////////////////
     // setAutoFotaResetIfNeeded()
     //  This will try to auto reset the redbend FOTA by clearing out data files
     //  It does this immediately if it is more than 5 minutes after boot, or sets a timer to do this at 5 minutes after boot.
     //////////////////////////////////////////////////////////////
-    public void setAutoFotaResetIfNeeded() {
+    void setAutoFotaResetIfNeeded() {
         if (SHOULD_AUTO_RESET_FOTA_AFTER_5_MINUTES) {
 
             int version = state.readState(State.VERSION_SPECIFIC_CODE);
@@ -769,6 +779,7 @@ public class MainService extends Service {
             if (schedule_in_ms <= 500) schedule_in_ms = 500; // 500 ms from now minimum (if we are close to our past 300 seconds from boot)
 
             Log.d(TAG, "Scheduling Auto FOTA Reset for " + schedule_in_ms + " ms from now");
+            initExec();
             exec.schedule(new VersionSpecificTask(), schedule_in_ms, TimeUnit.MILLISECONDS);
 
 
@@ -787,23 +798,55 @@ public class MainService extends Service {
     }
 
 
+    /////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////
+    //  Boot Message
 
 
+    /////////////////////////////////////////////////////////////////////////
+    // sendBootMessageAfterTimeout()
+    //  called at startup, sends a Boot Message after some time elapses to get the data that needs to be incorporated
+    /////////////////////////////////////////////////////////////////////////
+    void sendBootMessageAfterTimeout() {
 
-    class AddTestPingTask implements Runnable {
 
-        @Override
-        public void run() {
-
-            try {
-                // add a Test Ping
-            /*
-            Log.d(TAG, "Test Ping Triggered");
-            queue.addEvent(QueueItem.EVENT_TYPE_TEST);
-            */
-            } catch (Exception e) {}
+        if (io.isFullyInitialized()) {
+            // we need to send this message right away
+            sendBootMessageNow();
+        } else {
+            // schedule the message after a brief delay, to allow for IOService to report back
+            //  this shuld be about 1 second normally, so wait for 2 seconds
+            int schedule_in_ms = 2000; // 2 second delay
+            Log.d(TAG, "Scheduling Boot Message for " + schedule_in_ms + " ms from now");
+            initExec();
+            exec.schedule(new BootMessageTask(), schedule_in_ms, TimeUnit.MILLISECONDS);
         }
     }
+
+
+    void sendBootMessageNow() {
+        int io_boot_state = -1; // default value is -1 if this is unknown
+        if (io.isFullyInitialized()) {
+            io_boot_state = io.getBootState();
+        }
+        byte[] data = Codec.dataForSystemBoot(io_boot_state);
+        addEventWithData(EventType.EVENT_TYPE_REBOOT, data); // system booted
+    } // sendBootMessageNow()
+
+
+    class BootMessageTask implements Runnable {
+        @Override
+        public void run() {
+            sendBootMessageNow();
+        } // run
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////
+    //  Monitor & Watchdog Stuff
 
 
     class MonitorTask implements Runnable {
@@ -907,7 +950,7 @@ public class MainService extends Service {
 
                 // checks to see if we have skipped time (meaning we were sleeping and now awake)
                 if ((nowElapsedTime > lastRunningElapsedTime) &&
-                        (nowElapsedTime - lastRunningElapsedTime > 5000)) { // remember there is supposed to be 3 s delay at start
+                        (nowElapsedTime - lastRunningElapsedTime > 10000)) { // remember there is supposed to be 5 s delay at start
                     // more than 5 seconds has elapsed, maybe we were sleeping ?
 
                     Log.w(TAG, "Just woke up! Last Sleep Monitor Check was " + (nowElapsedTime - lastRunningElapsedTime) + " ms ago");
@@ -952,8 +995,10 @@ public class MainService extends Service {
     void startWatchdogThread() {
 
         Log.v(TAG, "Starting Watchdog Thread");
-        exec = new ScheduledThreadPoolExecutor(1);
-        exec.scheduleWithFixedDelay(new MonitorTask(), 5000, 500, TimeUnit.MILLISECONDS); // after 3 second, check every 1/10 second that we are still awake
+        initExec();
+        exec.scheduleWithFixedDelay(new MonitorTask(), 5000, 500, TimeUnit.MILLISECONDS);
     } // startWatchdogThread()
+
+
 
 } // Service

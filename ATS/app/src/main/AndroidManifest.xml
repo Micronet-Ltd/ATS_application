@@ -2,10 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.micronet.dsc.ats" >
 
-    <permission android:name="com.micronet.dsc.vbs.TXRX" android:label="VBUS Send/Receive" android:protectionLevel="signature"/>
 
+    <!-- permission for VBS -->
+
+    <permission android:name="com.micronet.dsc.vbs.TXRX" android:label="VBUS Send/Receive" android:protectionLevel="signature"/>
     <uses-permission android:name="com.micronet.dsc.vbs.TXRX" />
 
+    <!-- permission from resetRB -->
+    <uses-permission android:name="com.micronet.dsc.resetRB.resetClient" />
+
+    <!-- system permissions -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

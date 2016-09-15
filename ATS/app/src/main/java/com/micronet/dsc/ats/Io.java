@@ -969,6 +969,8 @@ public class Io {
                 if (intent.getBooleanExtra("containsInit", false)) { // does this contain Init info ?
 
 
+                    Log.d(TAG, "Received Init Info from IO service");
+
                     parseReceivedHardwareInit(intent);
 
                     double voltage = intent.getDoubleExtra("voltage", 0);
