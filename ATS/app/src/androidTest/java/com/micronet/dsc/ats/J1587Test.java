@@ -34,7 +34,7 @@ public class J1587Test extends AndroidTestCase {
         j1587 = new J1587(service.engine, true);
 
         service.queue.clearAll();
-        service.clearEventSequenceId();
+        service.clearEventSequenceIdNow();
 
         test = new TestCommon(service.queue);
 

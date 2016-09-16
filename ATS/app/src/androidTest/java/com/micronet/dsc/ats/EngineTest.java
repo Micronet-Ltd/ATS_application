@@ -26,7 +26,7 @@ public class EngineTest extends AndroidTestCase {
         engine = service.engine;
 
         service.queue.clearAll();
-        service.clearEventSequenceId();
+        service.clearEventSequenceIdNow();
 
         test = new TestCommon(service.queue);
 
@@ -58,9 +58,9 @@ public class EngineTest extends AndroidTestCase {
 
     public void test_checkParkingBrake() {
 
-        // Get the voltage threshold for the config setting, make sure it is as we expect
+        // Set the config for parking brake
 
-        service.config.writeSetting(Config.SETTING_PARKING_BRAKE, "3"); // messages
+        service.config.writeSetting(Config.SETTING_PARKING_BRAKE, "3|1"); // all messages, conflict-default is on
 
 
         // because input poll period is slower (500ms), really this takes wither 5 or 6 polls, not 30 or 40
@@ -102,7 +102,7 @@ public class EngineTest extends AndroidTestCase {
         assertFalse(service.state.readStateBool(State.FLAG_PARKING_BRAKE_STATUS));
         assertEquals(EventType.EVENT_TYPE_PARKBRAKE_OFF, service.queue.getFirstItem(Queue.SERVER_ID_PRIMARY).event_type_id);
 
-    } // test_chechkParkingBrake()
+    } // test_checkParkingBrake()
 
 
     void test_checkDTCs() {

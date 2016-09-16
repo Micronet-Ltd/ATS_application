@@ -54,6 +54,8 @@ public class J1939 extends EngineBus {
     long fuel_mperL = -1;
 
 
+    // These are used in determining how to deal with information received by the bus
+    int configParkingBrakeDefault = 0; // if parking brake info conflicts, use this value
 
 
     int last_known_bus_type = Engine.BUS_TYPE_NONE;
@@ -261,7 +263,8 @@ public class J1939 extends EngineBus {
     int odometer_type = ODOMETER_TYPE_UNKNOWN;
 
 
-
+    // logStatus()
+    //  This can be called periodically to update the logcat with current info
     public void logStatus() {
         Log.d(TAG,  engine.getBusName(myBusType) + "= " + (isCommunicating() ? "UP" : "--") + " Addr " + myAddress + " : " +
                 " DTCs " + numCollectedDtcs +
@@ -331,6 +334,14 @@ public class J1939 extends EngineBus {
     ////////////////////////////////////////////////////////////////////
     public void start() {
         Log.v(TAG, "start()");
+
+
+        // retrieve and remember configuration information about how to handle the J1939 data
+
+        configParkingBrakeDefault = engine.service.config.readParameterInt(Config.SETTING_PARKING_BRAKE, Config.PARAMETER_PARKING_BRAKE_CONFLICT_STATE);
+
+
+
 
         myBusType = Engine.BUS_TYPE_NONE;
 
@@ -542,6 +553,7 @@ public class J1939 extends EngineBus {
     ///////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////
     //  Checking if monitored variables have changed
+    //      This also includes bus-specific processing of the raw parameter data
     ///////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////
@@ -553,9 +565,64 @@ public class J1939 extends EngineBus {
         return engine.checkVin(Engine.BUS_TYPE_J1939,  newVin);
     }
 
+
+    boolean[] parkingBrakeHistory = new boolean[] {false, false, false, false, false};
+    int parkingBrakeCount = 0;
+
+    ////////////////////////////////////////////////////
+    // checkParkingBrake
+    //  returns false for the first 5 readings, then afterward returns the parking brake status from engine module
+    ////////////////////////////////////////////////////
     boolean checkParkingBrake(boolean on) {
-        flagParkingBrake = on;
-        return engine.checkParkingBrake(Engine.BUS_TYPE_J1939, on);
+
+        // Different nodes on the J1939 bus may report different states for the parking brake.
+        //  So we will maintain a brief history that hopefully includes data from all reporting nodes
+        //  This also has side effect of introducing a slight delay (debounce).
+
+        // If all history entries agree, then parking brake status is what is reported
+        // If entries are conflicting, then either we have just changed states or we have different nodes arguing
+        //  in this case, consult configuration to determine a default to use
+
+        // Shift the history and remember this new entry
+        for (int i = parkingBrakeHistory.length-1; i >=1; i--) {
+            parkingBrakeHistory[i] = parkingBrakeHistory[i - 1];
+        }
+        parkingBrakeHistory[0] = on;
+
+        if (parkingBrakeCount+1 < parkingBrakeHistory.length) {
+            parkingBrakeCount++;
+            return false; // we don't really have enough info to determine the state yet
+        }
+
+        // We have enough entries in our history
+        // Determine if the parking brake is really on or not.
+
+        int on_count = 0;
+        int off_count = 0;
+        for (int i = 0; i< parkingBrakeHistory.length; i++) {
+            if (parkingBrakeHistory[i]) on_count++; else off_count++;
+        }
+
+        if (on_count ==  parkingBrakeHistory.length) {
+            // all entries agree -- we are on
+            flagParkingBrake = true;
+        } else
+        if (off_count ==  parkingBrakeHistory.length) {
+            // all entries agree -- we are off
+            flagParkingBrake = false;
+        } else {
+            // we have both on and off reports that are conflicting, determine status based on configuration
+            if (configParkingBrakeDefault == 0) {
+                // report conflicts as "Off"
+                flagParkingBrake = false;
+            } else {
+                // report conflicts as "On"
+                flagParkingBrake = true;
+            }
+        } // conflict
+
+        // and report this up the chain
+        return engine.checkParkingBrake(Engine.BUS_TYPE_J1939, flagParkingBrake);
     } // checkParkingBrake()
 
 

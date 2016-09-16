@@ -26,7 +26,7 @@ public class IoTest  extends AndroidTestCase {
         io = service.io;
 
         service.queue.clearAll();
-        service.clearEventSequenceId();
+        service.clearEventSequenceIdNow();
 
         test = new TestCommon(service.queue);
 

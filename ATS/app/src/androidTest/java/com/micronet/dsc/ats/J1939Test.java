@@ -33,7 +33,7 @@ public class J1939Test extends AndroidTestCase {
         j1939 = new J1939(service.engine, true, 123456);
 
         service.queue.clearAll();
-        service.clearEventSequenceId();
+        service.clearEventSequenceIdNow();
 
         test = new TestCommon(service.queue);
 
@@ -624,63 +624,90 @@ public class J1939Test extends AndroidTestCase {
         // Setup
         J1939.CanFrame frame;
 
+        // set the default if we have mixed (conflicting) reports on parking brake status
+        service.config.writeSetting(Config.SETTING_PARKING_BRAKE, "3|1");
+
         j1939.start();
         j1939.myAddress = 0xBB; // just some random address
         j1939.outgoingList.clear();
         assertTrue(j1939.outgoingList.isEmpty());
-
-
-        // Testing -- Turn it on
 
         // Park Brake is PGN 0x00FEF1
         // Data:
         //      Byte 1 , bits 4-3 = parking brake switch
         //                      00 = not set, 01 = set
 
+        // Whatever we receive goes into a 5-deep history buffer. Current status is based on whole history.
+
+        // Place four entries in history, until we receive the first five entries status does not change
+        for (int i = 0; i < 4; i++) {
+            frame = new J1939.CanFrame(0x14FEF117, new byte[]{0b00000100, 0, 0, 0, 0, 0, 0, 0});
+            assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
+            assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
+            assertFalse(j1939.engine.status.flagParkingBrake); // unchanged
+        }
+
+
+
+        // Turn it on -- 5th consecutive entry of same value
         frame = new J1939.CanFrame(0x14FEF1CC, new byte[] {0b00000100 ,0 ,0, 0, 0,0,0,0});
         assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
         assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
         assertTrue(j1939.engine.status.flagParkingBrake);
 
 
-        // Testing -- And off
+        // Testing -- And receive some offs so that we are now conflicting
+        for (int i = 0; i < 4; i++) {
+            frame = new J1939.CanFrame(0x14FEF1CC, new byte[]{0b00000000, 0, 0, 0, 0, 0, 0, 0});
+            assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
+            assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
+            assertTrue(j1939.engine.status.flagParkingBrake); // still on --- default in case of conflict
+        }
 
-        frame = new J1939.CanFrame(0x14FEF1CC, new byte[] {0b00000000 ,0 ,0, 0, 0,0,0,0});
+        // Last one means all in buffer are off
+        frame = new J1939.CanFrame(0x14FEF1CC, new byte[]{0b00000000, 0, 0, 0, 0, 0, 0, 0});
         assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
         assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
-        assertFalse(j1939.engine.status.flagParkingBrake);
+        assertFalse(j1939.engine.status.flagParkingBrake); // still on --- default in case of conflict
 
 
-        // On: (Actual data from vehicle)
 
-        frame = new J1939.CanFrame(0x14FEF1CC, new byte[] {(byte) 0xF7, (byte) 0xFF, (byte) 0xFF, (byte) 0xC3, 0x00, (byte) 0xFF, (byte) 0xFF, 0x3F});
-        assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
-        assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
-        assertTrue(j1939.engine.status.flagParkingBrake);
+        // Turn On: (Actual data from vehicle)
+        for (int i = 0; i < 6; i++) {
+            frame = new J1939.CanFrame(0x14FEF1CC, new byte[]{(byte) 0xF7, (byte) 0xFF, (byte) 0xFF, (byte) 0xC3, 0x00, (byte) 0xFF, (byte) 0xFF, 0x3F});
+            assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
+            assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
+            assertTrue(j1939.engine.status.flagParkingBrake); // default is on, so after first one there is a conflict and we are on
+        }
+
 
 
         // Unchanged (actual data from vehicle)
+        for (int i = 0; i < 6; i++) {
+            frame = new J1939.CanFrame(0x14FEF1CC, new byte[]{(byte) 0xFF, 0x00, 0x00, (byte) 0xFC, 0x33, 0x58, 0x00, (byte) 0xCF});
+            assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
+            assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
+            assertTrue(j1939.engine.status.flagParkingBrake);
+        }
 
-        frame = new J1939.CanFrame(0x14FEF1CC, new byte[] {(byte) 0xFF, 0x00, 0x00, (byte) 0xFC, 0x33, 0x58, 0x00, (byte) 0xCF});
-        assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
-        assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
-        assertTrue(j1939.engine.status.flagParkingBrake);
 
-
-        // And Off (actual data from vehicle)
+        // And Turn Off (actual data from vehicle)
         //F3FF FF D300FFFF3F^
-        frame = new J1939.CanFrame(0x14FEF1CC, new byte[] {(byte) 0xF3, (byte) 0xFF, (byte) 0xFF, (byte) 0xD3, 0x00, (byte) 0xFF, (byte) 0xFF, (byte) 0x3F});
-        assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
-        assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
-        assertFalse(j1939.engine.status.flagParkingBrake);
+        for (int i = 0; i < 6; i++) {
+            frame = new J1939.CanFrame(0x14FEF1CC, new byte[]{(byte) 0xF3, (byte) 0xFF, (byte) 0xFF, (byte) 0xD3, 0x00, (byte) 0xFF, (byte) 0xFF, (byte) 0x3F});
+            assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
+            assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
+        }
+        assertFalse(j1939.engine.status.flagParkingBrake); // we will only turn off after we clear through history
 
 
         // Unchanged
-
-        frame = new J1939.CanFrame(0x14FEF1CC, new byte[] {(byte) 0xFF, 0x00, 0x00, (byte) 0xFC, 0x33, 0x58, 0x00, (byte) 0xCF});
-        assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
-        assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
-        assertFalse(j1939.engine.status.flagParkingBrake);
+        for (int i = 0; i < 6; i++) {
+            frame = new J1939.CanFrame(0x14FEF1CC, new byte[]{(byte) 0xFF, 0x00, 0x00, (byte) 0xFC, 0x33, 0x58, 0x00, (byte) 0xCF});
+            assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
+            assertTrue(j1939.outgoingList.isEmpty()); // No Response needed
+            assertFalse(j1939.engine.status.flagParkingBrake);
+        }
 
 
 

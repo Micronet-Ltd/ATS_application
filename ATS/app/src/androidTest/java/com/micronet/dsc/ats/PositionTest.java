@@ -25,7 +25,7 @@ public class PositionTest extends AndroidTestCase {
         position = service.position;
 
         service.queue.clearAll();
-        service.clearEventSequenceId();
+        service.clearEventSequenceIdNow();
 
         test = new TestCommon(service.queue);
     }

@@ -117,6 +117,7 @@ public class Config {
         public static final int PARAMETER_REVERSE_GEAR_MESSAGES = 0;
     public static final int SETTING_PARKING_BRAKE = 33; //
         public static final int PARAMETER_PARKING_BRAKE_MESSAGES = 0;
+        public static final int PARAMETER_PARKING_BRAKE_CONFLICT_STATE = 1; // if different nodes report different states, then treat the brake as (1=on)
     public static final int SETTING_FAULT_CODES = 34; //
         public static final int PARAMETER_FAULT_CODE_MESSAGES = 0;
     public static final int SETTING_VEHICLECOMMUNICATION = 35; //
@@ -163,7 +164,7 @@ public class Config {
             "|0|P|10", // forward raw bus data
             "300", // fuel status seconds
             "3", // reverse gear messages
-            "3", // parking brake messages
+            "3|1", // parking brake messages: All messages On, in case of conflicting data treat it as On
             "1", // fault code messages
             "Off|Off" // J1939 speed+enable, J1708 enabled
 
