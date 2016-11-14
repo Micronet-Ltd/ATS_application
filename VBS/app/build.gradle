@@ -4,15 +4,15 @@ android {
     signingConfigs {
         a300keys
     }
-    compileSdkVersion 21
+    compileSdkVersion 24
     buildToolsVersion "21.1.2"
 
     defaultConfig {
         applicationId "com.micronet.dsc.vbs"
         minSdkVersion 15
-        targetSdkVersion 21
-        versionCode 220
-        versionName "2.2.0"
+        targetSdkVersion 15
+        versionCode 230
+        versionName "2.3.0"
     }
     buildTypes {
         release {
@@ -30,8 +30,8 @@ dependencies {
     //compile fileTree(dir: 'libs', include: ['*.jar'])
     compile fileTree(dir: 'libs', include: ['.jar','.so'])
     testCompile 'junit:junit:4.12'
-    compile 'com.android.support:appcompat-v7:21.0.3'
-
+    //compile 'com.android.support:appcompat-v7:21.0.3'
+    compile 'com.android.support:support-core-utils:24.2.0'
     compile files('libs/canbus_api.jar')
 }
 
