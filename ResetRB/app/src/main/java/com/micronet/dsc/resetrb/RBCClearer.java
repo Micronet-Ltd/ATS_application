@@ -36,6 +36,17 @@ public class RBCClearer {
             Log.d(TAG, "Exception exec: " + command + ": " + e.getMessage());
         }
 
+        // Remove result file from prior UA operations
+        command = "rm /data/redbend/result";
+        Log.d(TAG, "Running " + command);
+
+        try {
+            Runtime.getRuntime().exec(new String[] { "sh", "-c", command } ).waitFor();
+        } catch (Exception e) {
+            Log.d(TAG, "Exception exec: " + command + ": " + e.getMessage());
+        }
+
+
         command = "pm clear com.redbend.client";
         Log.d(TAG, "Running " + command);
 
