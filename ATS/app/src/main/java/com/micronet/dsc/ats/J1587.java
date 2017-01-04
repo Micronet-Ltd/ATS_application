@@ -823,7 +823,7 @@ public class J1587 extends EngineBus {
         serviceIntent.setPackage(VehicleBusConstants.PACKAGE_NAME_VBS);
         serviceIntent.setAction(VehicleBusConstants.SERVICE_ACTION_START);
 
-        serviceIntent.putExtra("bus", "J1708");
+        serviceIntent.putExtra(VehicleBusConstants.SERVICE_EXTRA_BUS, "J1708");
         engine.service.context.startService(serviceIntent);
 
     }
@@ -841,7 +841,7 @@ public class J1587 extends EngineBus {
         Intent serviceIntent = new Intent();
         serviceIntent.setPackage(VehicleBusConstants.PACKAGE_NAME_VBS);
         serviceIntent.setAction(VehicleBusConstants.SERVICE_ACTION_STOP);
-        serviceIntent.putExtra("bus", "J1708");
+        serviceIntent.putExtra(VehicleBusConstants.SERVICE_EXTRA_BUS, "J1708");
 
         engine.service.context.startService(serviceIntent);
 
@@ -864,9 +864,9 @@ public class J1587 extends EngineBus {
 
 
         //ibroadcast.putExtra("password", VehicleBusService.BROADCAST_PASSWORD);
-        ibroadcast.putExtra("id", frame.id);
-        ibroadcast.putExtra("priority", frame.priority);
-        ibroadcast.putExtra("data", frame.data);
+        ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_ID, frame.id);
+        ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_PRIORITY, frame.priority);
+        ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_DATA, frame.data);
 
         engine.service.context.sendBroadcast(ibroadcast);
     } // broadcastTx()
@@ -889,9 +889,9 @@ public class J1587 extends EngineBus {
 
                 J1708Frame frame = new J1708Frame();
 
-                frame.priority = intent.getIntExtra("priority", -1);
-                frame.id = intent.getIntExtra("id", -1);
-                frame.data = intent.getByteArrayExtra("data");
+                frame.priority = intent.getIntExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_PRIORITY, -1);
+                frame.id = intent.getIntExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_ID, -1);
+                frame.data = intent.getByteArrayExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_DATA);
 
                 receiveJ1708Frame(frame);
             } catch (Exception e) {

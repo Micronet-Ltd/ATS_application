@@ -580,6 +580,10 @@ public class MainService extends Service {
     } // shutdownService()
 
 
+    //////////////////////////////////////////////////////////////////
+    // setForeground()
+    //  move the service to the foreground and display the icon
+    //////////////////////////////////////////////////////////////////
     void setForeground() {
 
         Intent myIntent = new Intent(context, MainActivity.class);
@@ -603,7 +607,10 @@ public class MainService extends Service {
         startForeground(ONGOING_NOTIFICATION_ID, noti);
     }
 
-
+    //////////////////////////////////////////////////////////////////
+    // setBackground()
+    //  move the service to the background
+    //////////////////////////////////////////////////////////////////
     private void setBackground() {
         stopForeground(true); // true = remove notification
     }

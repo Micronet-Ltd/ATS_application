@@ -28,6 +28,8 @@ public class State {
 
     public static final int FLAG_USING_INPUT6_AS_IGNITION = 4; // set if we are using input6 as the ignition line
 
+    public static final int FLAG_WAIT_ENGINE_ON_MESSAGE = 5; // are we waiting to send the engine-on message
+
     public static final int FLAG_IGNITIONKEY_INPUT = 10;
     public static final int FLAG_GENERAL_INPUT1 = 11;
     public static final int FLAG_GENERAL_INPUT2 = 12;
@@ -60,12 +62,13 @@ public class State {
                                                           // also used to place data in shutdown message
     public static final int NEXT_SCHEDULEDWAKEUP_TIME_S = 102;  // for checking at boot if it could have been caused by heartbeat
     public static final int LAST_BOOT_TIME = 103; // for saving the time of last boot to determine if we rebooted
-    public static final int ENGINE_WARM_START = 104; // for saving whether we've already gotten engine info since last reboot
+    public static final int ENGINE_WARM_START = 104; // for saving whether we've already gotten certain engine info since last reboot
 
 
     // regarding which engine bus and addressing info
     public static final int J1939_BUS_TYPE = 110;
     public static final int J1939_BUS_ADDRESS = 111;
+    public static final int J1939_BUS_VERIFIED = 112; // for storing whether we verified the bus type is correct since last reboot
 
 
 

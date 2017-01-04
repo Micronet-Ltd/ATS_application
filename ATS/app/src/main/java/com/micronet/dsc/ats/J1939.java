@@ -25,6 +25,9 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 public class J1939 extends EngineBus {
 
+
+    // Debug flags
+
     //static final int DEBUG_FORCE_LAST_ADDRESS = 0x80; // always use 0x80 for the preferred address
     static final int DEBUG_FORCE_LAST_ADDRESS = 0 ; // do not force any particular last address
 
@@ -34,12 +37,12 @@ public class J1939 extends EngineBus {
     public static final int DTC_COLLECTION_TIME_MS = 2000; // wait this long to collect all reported DTCs (DTCs are sent at 1Hz, this must be longer)
 
 
+    static final int DEFAULT_AUTODETECT_BITRATE = 250000; // use 250000 as the default (first) bitrate for auto-detecting if we don't have a speed
 
 
     ScheduledThreadPoolExecutor exec;
 
-//    CAN can;
-//    CanbusHardwareFilter[] canHardwareFilters;
+
     int[] canFilterIds;     // Frame Ids that we are interested in
     int[] canFilterMasks;   // Corresponding Masks for those ids
     boolean busTxIsReady; // this will be set to true once we are told by service that the bus Tx is ready
@@ -58,22 +61,11 @@ public class J1939 extends EngineBus {
     int configParkingBrakeDefault = 0; // if parking brake info conflicts, use this value
 
 
-    int last_known_bus_type = Engine.BUS_TYPE_NONE;
-    int last_known_bus_address = J1939_ADDRESS_NULL;
-
-    // Discovery
-
-    public static final int DISCOVER_BUS_WAIT_MS = 2000; // wait 2 seconds on each bus
-
-    public static final int DISCOVERY_STAGE_OFF = 0;
-    public static final int DISCOVERY_STAGE_250 = 1;
-    public static final int DISCOVERY_STAGE_500 = 2;
-
-    int discoveryStage = DISCOVERY_STAGE_OFF;
+    int last_known_bus_type = Engine.BUS_TYPE_NONE; // type (speed) of bus
+    int last_known_bus_address = J1939_ADDRESS_NULL; // our address on the bus
 
 
-    boolean discoveryRequired = false; // this is set to true if the bus needs to be discovered before using it,
-
+    boolean busTypeVerified = false; // assume the bus type is unverified to start
 
     // Address Claiming
 
@@ -129,7 +121,7 @@ public class J1939 extends EngineBus {
     public static final int ADDRESS_COLLECT_WINDOW_MS = 1250; // 1.25s time to wait after requesting address(es)/Name(s) from other CAs
     public static final int ADDRESS_CLAIMWAIT_WINDOW_MS = 250; // 250ms time to wait after broadcasting a claimed address before continuing
     public static final int ADDRESS_MAX_CANNOTCLAIM_DELAY_MS = 153; // 153ms max time to wait before sending a cannot claim message
-                                                               // Note: this may need to be adjusted due to delays in API propagationg
+                                                               // Note: this may need to be adjusted due to delays in API propagation
 
     int myAddress = J1939_ADDRESS_NULL; // the address I have claimed on the bus
     int attemptingAddress = J1939_ADDRESS_NULL; // an address I am attempting to claim
@@ -151,7 +143,7 @@ public class J1939 extends EngineBus {
     public static final int PARSED_PACKET_TYPE_PGN = 1; // recognized as a pgn we know about
     public static final int PARSED_PACKET_TYPE_CONTROL = 2; // recognized as a control packet of some kind (request, TP packet, etc.)
 
-
+/*
 
     public static class CanFilters {
 
@@ -159,8 +151,11 @@ public class J1939 extends EngineBus {
         int[] masks;
 
     }
+*/
 
+    // classes to hold the can data
 
+    // raw CAN packets
     public static class CanFrame {
 
         int id;
@@ -176,6 +171,8 @@ public class J1939 extends EngineBus {
 
     } // CanFrame
 
+
+    // J1939 packets
     public static class CanPacket {
 
         // The 29 bit ID forms these values
@@ -205,7 +202,7 @@ public class J1939 extends EngineBus {
 
 
 
-
+    // J1939 Definitions
 
 
     // PFs have a destination address
@@ -218,7 +215,7 @@ public class J1939 extends EngineBus {
     public static final int PF_CONNECTION_DATA = 0xEB;      // transfer data in a connection
 
 
-    //public static final int PGN_CLAIMED_ADDRESS = 0x00EEFF; // these are always going to global (FF)
+    // PGNs do not have a destination address
 
     public static final int PGN_VIN = 0x00FEEC; //
     public static final int PGN_FAULT_DM1 = 0x00FECA; //
@@ -230,6 +227,8 @@ public class J1939 extends EngineBus {
     public static final int PGN_PARKING = 0x00FEF1; // cruise control&vehicle speed (reports parking brake)
     public static final int PGN_GEAR = 0x00F005; // ECM2 (reports reverse gear)
 
+
+    // Masks for PGNs and PFs to use with VBS
 
     // These are Full PGN that we want to receive (not global PDFs)
     public static final int HW_RECEIVE_PGN_MASK = 0x3FFFF00; // use the Reserved bit, DataPage and PF and GN as the hardware mask
@@ -254,8 +253,11 @@ public class J1939 extends EngineBus {
 
 
 
+    // Other
+
     // There are two different odometer types we can use, lo-res and hi-res.
     // If hi-res is present, then we want that to take priority, otherwise we use lo-res
+    // We need to keep track of which one we are using
 
     static final int ODOMETER_TYPE_UNKNOWN = 0;
     static final int ODOMETER_TYPE_LORES = 1;
@@ -280,7 +282,7 @@ public class J1939 extends EngineBus {
 
     ////////////////////////////////////////////////////////////////////
     // J1939() class
-    //  warmStart: if true, then we don't need to verify what vehicle we are connected to
+    //  warmStart: if false, then we need to re-verify which bus we are connected to
     // Parameters:
     //  device_id : The J1939 Name that is broadcast by this node will incorporate the device_id for uniqueness
     ////////////////////////////////////////////////////////////////////
@@ -302,11 +304,12 @@ public class J1939 extends EngineBus {
         J1939_NAME &= 0xFFFFFFFFFFE00000L; // 21 bits
         J1939_NAME |= J1939_NAME_IDENTITY_NUMBER;
 
-        // if this is the first start since power-up. we do a cold-start
-        if (!warmStart) {
-            // DS 2016-01: note bus discovery is temporarily overrriden later so that it never actually occurs
-            discoveryRequired = true; // we must discover the bus, if any, we are connected to
-        }
+        // do we need to re-verify the saved bus ?
+
+        busTypeVerified  = engine.service.state.readStateBool(State.J1939_BUS_VERIFIED); // we've verified this info is correct
+        if (!warmStart) busTypeVerified = false; // we need to re-verify
+
+
     }
 
 /*
@@ -328,9 +331,7 @@ public class J1939 extends EngineBus {
 
     ////////////////////////////////////////////////////////////////////
     // start()
-    //      "Start" the J1939 monitoring, called when app is started
-    // Parameters:
-    //  requested_pgns : make sure that we also are capable of receiving this pgns.
+    //      "Start" the J1939 monitoring, called when app is started with ignition on, or when ignition is turned on
     ////////////////////////////////////////////////////////////////////
     public void start() {
         Log.v(TAG, "start()");
@@ -382,33 +383,40 @@ public class J1939 extends EngineBus {
         // Start: API does not support auto-detect (discovery)
         // The API does not support listen-only mode, and so we must know the baud rate of the bus before hand
         //  so we cannot discover the baud rate
-        discoveryRequired = false;
-        int bus_speed = engine.service.config.readParameterInt(Config.SETTING_VEHICLECOMMUNICATION, Config.PARAMETER_VEHICLECOMMUNICATION_J1939_SPEED_KBS);
 
-        if (bus_speed == 500) {
-            last_known_bus_type = Engine.BUS_TYPE_J1939_500K;
-        } else {
-            last_known_bus_type = Engine.BUS_TYPE_J1939_250K;
+        int bus_speed_kbs = 0;
+        String bus_speed_str = engine.service.config.readParameterString(Config.SETTING_VEHICLECOMMUNICATION, Config.PARAMETER_VEHICLECOMMUNICATION_J1939_SPEED_KBS);
+
+        if (!bus_speed_str.toUpperCase().equals("AUTO")) {
+            bus_speed_kbs = engine.service.config.readParameterInt(Config.SETTING_VEHICLECOMMUNICATION, Config.PARAMETER_VEHICLECOMMUNICATION_J1939_SPEED_KBS);
         }
 
-        // End: API does not support auto-detect
+        boolean auto_detect = true; // auto-detect the bitrate
 
+        if (bus_speed_kbs != 0) { // we hard-configured a bus speed
+            auto_detect = false; // no need to auto-detect,  just check & use this configured speed
 
-        if (discoveryRequired) {
-            // we need to re-discover the bus
-            discoverBus(last_known_bus_type);
-            // waits for other messages to be detected on the bus
-        } else {
-            // we already know which bus we are on
-            selectBus(last_known_bus_type);
-            // wait for the bus to come online and then we can start address claiming
+            // force the bus speed
+            if (bus_speed_kbs == 500) {
+                last_known_bus_type = Engine.BUS_TYPE_J1939_500K;
+            } else {
+                last_known_bus_type = Engine.BUS_TYPE_J1939_250K;
+            }
         }
+
+
+        if (busTypeVerified) auto_detect = false; // no reason to auto-detect if we already know the answer.
+
+        // Instruct VBS to start up a CAN bus
+        discoverBus(last_known_bus_type, busTypeVerified, auto_detect);
+
+
 
     } // start();
 
     ////////////////////////////////////////////////////////////////////
     // stop()
-    //      "Stop" the J1939 monitoring, called when app is ended
+    //      "Stop" the J1939 monitoring, called when app is ended or ignition is turned off
     ////////////////////////////////////////////////////////////////////
     public void stop() {
 
@@ -416,7 +424,6 @@ public class J1939 extends EngineBus {
 
 
         // cancel any timers that may be started
-        stopDiscovery(); // Bus discovery tasks
         stopClaimingAddress(); // addressing tasks
 
         stopCollectingDtcs();
@@ -672,83 +679,22 @@ public class J1939 extends EngineBus {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     ///////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////
-    // Bus Discovery functions
+    //  Bus Selection
     ///////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////
 
-
-
-
-    ////////////////////////////////////////////////////////
-    // discoverBus()
-    //  attempt to discover the presence of a J1939 bus
-    // Parameters
-    //  preferred_bus_type : if given, start with this bus (remembered from last time)
-    ////////////////////////////////////////////////////////
-    boolean discoverBus(int preferred_bus_type) {
-
-        Log.v(TAG, "discoverBus()");
-
-        setBusStatus(BUS_STATUS_DISCOVER);
-
-        // we are not communicating with any bus since we are in "discovery"
-        engine.clearBusDetected(Engine.BUS_TYPE_J1939_500K);
-        engine.clearBusDetected(Engine.BUS_TYPE_J1939_250K);
-
-        if (preferred_bus_type == Engine.BUS_TYPE_J1939_500K) {
-            discoveryStage = DISCOVERY_STAGE_500;
-            startCanBus(500000, true, canFilterIds, canFilterMasks);
-        } else {
-            discoveryStage = DISCOVERY_STAGE_250;
-            startCanBus(250000, true, canFilterIds, canFilterMasks);
-        }
-
-        // Now we need to wait a certain amount of time to see if we detect any activity on this bus
-        // If no activity is detected, then we will try another bus
-
-        mainHandler.postDelayed(discoverBusTask, DISCOVER_BUS_WAIT_MS); // try two seconds
-
-        return true;
-    } // discoverBus()
-
-
+/*
     ///////////////////////////////////////////////////////////////
     // selectBus()
-    //  forces the bus to be a specific type (also means we are no longer in discovery)
+    //  selects a bus of a specific type
     ///////////////////////////////////////////////////////////////
     void selectBus(int bus_type) {
 
         Log.v(TAG, "selectBus(" + bus_type + ")");
-
-
-        discoveryStage = DISCOVERY_STAGE_OFF; // turn off discovery if it was on
 
         // clear the J1939 bus types in the engine communication bitfield, we will mark the correct one below
         engine.clearBusDetected(Engine.BUS_TYPE_J1939_500K);
@@ -763,88 +709,98 @@ public class J1939 extends EngineBus {
                 engine.setBusDetected(Engine.BUS_TYPE_J1939_500K);
                 startCanBus(500000, false, canFilterIds, canFilterMasks);
                 break;
+            default:
+                Log.e(TAG,"Invalid engine bus type #" + bus_type);
+                break;
         }
 
         myBusType = bus_type;
 
     } // selectBus()
+*/
+
+
+    int busTypeToSpeed(int bus_type) {
+        switch (bus_type) {
+            case Engine.BUS_TYPE_J1939_500K:
+                return 500000;
+            case Engine.BUS_TYPE_J1939_250K:
+                return 250000;
+            default:
+                return 0;
+        }
+    }
+
+    int bitrateToBusType(int bitrate) {
+        switch (bitrate) {
+            case 500000:
+                return Engine.BUS_TYPE_J1939_500K;
+            case 250000:
+                return Engine.BUS_TYPE_J1939_250K;
+            default:
+                return Engine.BUS_TYPE_NONE;
+        }
+    }
+
+    ///////////////////////////////////////////////////////////////
+    // discoverBus()
+    //  start the discovery of a bus speed, informing engine
+    //  Parameters:
+    //      verified : boolean: have we verified this bus type is correct (by receiving frames)
+    //      auto_detect: boolean: should we attempt to find the correct bus type ?
+    ///////////////////////////////////////////////////////////////
+    void discoverBus(int bus_type, boolean verified, boolean auto_detect) {
+
+        int bitrate = busTypeToSpeed(bus_type);
+
+        //Log.v(TAG, "discoverBus starting @ " + bitrate + "kb " + (verified ? "pre-verified " : "unverified ") + (auto_detect ? "auto-detect" : ""));
+
+        // clear the J1939 bus types in the engine communication bitfield, we will mark the correct one below
+        engine.clearBusDetected(Engine.BUS_TYPE_J1939_500K);
+        engine.clearBusDetected(Engine.BUS_TYPE_J1939_250K);
+
+        if (bitrate != 0) {
+            startCanBus(bitrate, verified, auto_detect, canFilterIds, canFilterMasks);
+        } else {
+            // unknown bitrate
+            if (auto_detect) {
+                // use 250kbs as starting point since nothing was specified
+                startCanBus(DEFAULT_AUTODETECT_BITRATE, false, auto_detect, canFilterIds, canFilterMasks);
+            } else {
+                Log.e(TAG, "Invalid engine bus type #" + bus_type);
+            }
+        }
+
+        myBusType = Engine.BUS_TYPE_NONE; // we have an unknown bus
+    } // discoverBus()
 
 
     ///////////////////////////////////////////////////////////////
     // markDiscovered()
-    //  mark the current bus as discovered
+    //  remember that we have had communication over a bus at this bitrate
     ///////////////////////////////////////////////////////////////
-    public void markDiscovered() {
+    void markDiscovered(int bitrate) {
+        int bus_type;
 
-        if (mainHandler != null)
-            mainHandler.removeCallbacks(discoverBusTask); // remove any pending timers
+        bus_type = bitrateToBusType(bitrate);
 
-        if (discoveryStage == DISCOVERY_STAGE_OFF) return; // we were not in process of discovering
-
-        switch (discoveryStage){
-            case DISCOVERY_STAGE_250:
-                myBusType = Engine.BUS_TYPE_J1939_250K;
-                break;
-            case DISCOVERY_STAGE_500:
-                myBusType = Engine.BUS_TYPE_J1939_500K;
-                break;
+        if (bitrate == 0) {
+            Log.e(TAG, "VBS not reporting CAN bitrate .. is VBS upgraded?");
+            return;
         }
 
-        engine.setBusDetected(myBusType); // let the engine know we have detected a bus;
+        if (bus_type == Engine.BUS_TYPE_NONE) {
+            Log.e(TAG, "VBS reports unknown CAN bitrate: " + bitrate);
+            return;
+        }
 
-        startCanWriting();
+        engine.service.state.writeState(State.J1939_BUS_TYPE, bus_type);
+        engine.service.state.writeState(State.J1939_BUS_VERIFIED, 1); // we've verified this info is correct
+        engine.setBusDetected(bus_type);
+        myBusType = bus_type;
 
-        // remember this we discovered this bus, this will last until the next power-up
-        engine.service.state.writeState(engine.service.state.J1939_BUS_TYPE, myBusType);
-
+        Log.v(TAG, "remembering CAN bitrate: " + bitrate);
     } // markDiscovered()
-
-
-    ///////////////////////////////////////////////////////////////
-    // stopDiscovery()
-    //  aborts all discovery
-    ///////////////////////////////////////////////////////////////
-    public void stopDiscovery() {
-
-        if (mainHandler != null) {
-            mainHandler.removeCallbacks(discoverBusTask); // remove any pending timers
-        }
-        discoveryStage = DISCOVERY_STAGE_OFF; // turn off discovery
-
-    } // stopDiscovery
-
-    ///////////////////////////////////////////////////////////////
-    // discoverBusTask()
-    //  task that executes after listening on a bus for a given amount of time to listen on next bus
-    ///////////////////////////////////////////////////////////////
-    private Runnable discoverBusTask = new Runnable() {
-
-        @Override
-        public void run() {
-            try {
-                Log.d(TAG, "discover window expired");
-
-                switch (discoveryStage) {
-                    case DISCOVERY_STAGE_250:
-                        startCanBus(500000, true, canFilterIds, canFilterMasks);
-                        discoveryStage = DISCOVERY_STAGE_500;
-                        break;
-                    case DISCOVERY_STAGE_500:
-                        startCanBus(250000, true, canFilterIds, canFilterMasks);
-                        discoveryStage = DISCOVERY_STAGE_250;
-                        break;
-                }
-
-            } catch(Exception e) {
-                Log.e(TAG + ".discoverBusTask", "Exception: " + e.toString(), e);
-            }
-            if (discoveryStage != DISCOVERY_STAGE_OFF)
-                mainHandler.postDelayed(discoverBusTask, DISCOVER_BUS_WAIT_MS); // try again for two seconds
-        }
-    }; // discoverBusTask()
-
-
-
 
 
 
@@ -1936,6 +1892,7 @@ public class J1939 extends EngineBus {
     } // packet2frame()
 
 
+
     //////////////////////////////////////////////////////////////////
     // frame2packet()
     //  convert from CAN frame to a J1939 packet
@@ -2006,8 +1963,6 @@ public class J1939 extends EngineBus {
     int receivePacket(CanPacket packet) {
 
 
-
-        markDiscovered(); // no matter what we are getting valid packets on this bus.
 
         setRecentRxReceived();
 
@@ -2125,141 +2080,24 @@ public class J1939 extends EngineBus {
 
 
 
-    /*
-
-    void startCanWriting() {
-        can.startWriting()
-    }
-
-
-    void abortCanTransmits() {
-        can.abortTransmits();
-    }
-
-    void startCanBus(int bitrate, boolean listenOnly, int[] ids, int[] masks) {
-            can.start(bitrate, listenOnly,//     .....   canHardwareFilters);
-    }
-
-    void stopCanBus() {
-        if (can != null) {
-            can.stop();
-        }
-    }
-
-    void setupCanBus(int[] additional_pgns) {
-        can = new CAN(engine.service.isUnitTesting);
-
-        can.setReceiveCallbacks(mainHandler, frameAvailableCallback, busReadyRxCallback, busReadyTxCallback);
-
-        // Create the hardware filters we will put on this interface
-        if ((additionalPGNs != null) && (additionalPGNs.length > 0)) {
-            canHardwareFilters = new CanbusHardwareFilter[3];
-
-            // add additional filters for user-requested PGNs
-            int[] adjusted_hw_pgns = new int[additionalPGNs.length];
-
-            for (int i = 0; i < adjusted_hw_pgns.length; i++) {
-                adjusted_hw_pgns[0] = additionalPGNs[0] << 8; // convert from PGN to HW Frame format
-            }
-            canHardwareFilters[2]= new CanbusHardwareFilter(adjusted_hw_pgns, HW_RECEIVE_PGN_MASK, CanbusFrameType.EXTENDED);
-        } else {
-            canHardwareFilters = new CanbusHardwareFilter[2]; // only two filters
-        }
-
-        // These filters remain the same no matter what:
-        canHardwareFilters[0] = new CanbusHardwareFilter(HW_RECEIVE_PFS, HW_RECEIVE_PF_MASK, CanbusFrameType.EXTENDED);
-        canHardwareFilters[1] = new CanbusHardwareFilter(HW_RECEIVE_PGNS, HW_RECEIVE_PGN_MASK, CanbusFrameType.EXTENDED);
-
-    }
-
-
-
-    ///////////////////////////////////////////////////////////////
-    // receiveAllFrames()
-    //  takes available frames from the CAN class one by one and processes them
-    ///////////////////////////////////////////////////////////////
-    void receiveAllFrames() {
-        // is there something in the queue to be received?
-        CanbusFrame frame;
-        do {
-            frame = can.receiveFrame();
-            receiveCANFrame(frame.getId(), frame.getData());
-        } while (frame != null);
-    } // receiveAllFrames()
-
-
-    ///////////////////////////////////////////////////////////////
-    // frameAvailableCallback()
-    //  This runnable will be posted by the CAN class whenever there is something in the receive buffer
-    ///////////////////////////////////////////////////////////////
-    private Runnable frameAvailableCallback = new Runnable() {
-        @Override
-        public void run() {
-            try {
-                Log.vv(TAG, "frameAvailableCallback()");
-                // process any frames that are ready
-                receiveAllFrames();
-                Log.vv(TAG, "frameAvailableCallback() END");
-            } catch (Exception e) {
-                Log.e(TAG + ".frameAvailableCallback", "Exception: " + e.toString(), e);
-            }
-        } // run()
-    }; // frameAvailableCallback()
-
-    ///////////////////////////////////////////////////////////////
-    // busReadyCallback()
-    //  This runnable will be posted by the CAN class whenever we are ready to write on the bus
-    ///////////////////////////////////////////////////////////////
-    private Runnable busReadyTxCallback = new Runnable() {
-        @Override
-        public void run() {
-            try {
-                Log.v(TAG, "busReadyTxCallback()");
-
-                // Note this can be called many times during discovery when the bus is changed.
-
-                if (discoveryStage == DISCOVERY_STAGE_OFF) {
-                    // We are done with discovery, try to claim an address
-                    startClaimingAddress(last_known_bus_address);
-                }
-                Log.v(TAG, "busReadyTxCallback() END");
-            } catch (Exception e) {
-                Log.e(TAG + ".busReadyTxCallback", "Exception: " + e.toString(), e);
-            }
-        } // run()
-    }; // busReadyTxCallback()
-
-    ///////////////////////////////////////////////////////////////
-    // busReadyCallback()
-    //  This runnable will be posted by the CAN class whenever we are ready to read on the bus
-    ///////////////////////////////////////////////////////////////
-    private Runnable busReadyRxCallback = new Runnable() {
-        @Override
-        public void run() {
-            try {
-                Log.vv(TAG, "busReadyRxCallback()");
-
-            } catch (Exception e) {
-                Log.e(TAG + ".busReadyRxCallback", "Exception: " + e.toString(), e);
-            }
-        } // run()
-    }; // busReadyRxCallback()
-*/
 
     ///////////////////////////////////////////////////////////////
     // busReadyTxCallback()
-    //  This runnable will be posted by the CAN class whenever we are ready to write on the bus
+    //  This runnable will be posted by the Engine class whenever we are ready to write on the bus
+    //      It can also be used as an indication that we have discovered the bus speed
     ///////////////////////////////////////////////////////////////
-    void busReadyTxCallback() {
+    void busReadyTxCallback(int bitrate) {
 
         if (!busTxIsReady) {
             Log.v(TAG, "received TX Ready signal");
             busTxIsReady = true;
 
-            if (discoveryStage == DISCOVERY_STAGE_OFF) {
-                // We are done with discovery, try to claim an address
-                startClaimingAddress(last_known_bus_address);
-            }
+            // mark this bus as discovered
+            markDiscovered(bitrate);
+
+            // next try to claim an address
+            startClaimingAddress(last_known_bus_address);
+
         }
 
     } // busReadyTxCallback()
@@ -2269,13 +2107,9 @@ public class J1939 extends EngineBus {
         // Intentionally Blank For Now
     }
 
-    void startCanWriting() {
-        // Writing is always enabled on bus for now
-    }
 
-
-    void startCanBus(int bitrate, boolean listenOnly, int[] ids, int[] masks) {
-        Log.v(TAG, "Starting Vbus/CAN Service");
+    void startCanBus(int bitrate, boolean skipVerify, boolean autoDetect, int[] ids, int[] masks) {
+        Log.v(TAG, "Starting Vbus/CAN Service " + bitrate +"kb " + (skipVerify ? "verify-off " : "verify-on ") + (autoDetect ? "auto-on" : "auto-off"));
         //Log.v(TAG, "Filter[0] " + String.format("%X", ids[0]) + " " + String.format("%X", masks[0]));
 
 
@@ -2293,11 +2127,13 @@ public class J1939 extends EngineBus {
         serviceIntent.setPackage(VehicleBusConstants.PACKAGE_NAME_VBS);
         serviceIntent.setAction(VehicleBusConstants.SERVICE_ACTION_START);
 
-        serviceIntent.putExtra("bus", "CAN");
-        serviceIntent.putExtra("bitrate", bitrate);
-        serviceIntent.putExtra("listenOnly", listenOnly);
-        serviceIntent.putExtra("hardwareFilterIds", ids);
-        serviceIntent.putExtra("hardwareFilterMasks", masks);
+        serviceIntent.putExtra(VehicleBusConstants.SERVICE_EXTRA_BUS, "CAN");
+        serviceIntent.putExtra(VehicleBusConstants.SERVICE_EXTRA_BITRATE, bitrate);
+        //serviceIntent.putExtra("listenOnly", listenOnly);
+        serviceIntent.putExtra(VehicleBusConstants.SERVICE_EXTRA_SKIPVERIFY, skipVerify);
+        serviceIntent.putExtra(VehicleBusConstants.SERVICE_EXTRA_AUTODETECT, autoDetect);
+        serviceIntent.putExtra(VehicleBusConstants.SERVICE_EXTRA_HARDWAREFILTER_IDS, ids);
+        serviceIntent.putExtra(VehicleBusConstants.SERVICE_EXTRA_HARDWAREFILTER_MASKS, masks);
 
         engine.service.context.startService(serviceIntent);
 
@@ -2318,7 +2154,7 @@ public class J1939 extends EngineBus {
         Intent serviceIntent = new Intent();
         serviceIntent.setPackage(VehicleBusConstants.PACKAGE_NAME_VBS);
         serviceIntent.setAction(VehicleBusConstants.SERVICE_ACTION_STOP);
-        serviceIntent.putExtra("bus", "CAN");
+        serviceIntent.putExtra(VehicleBusConstants.SERVICE_EXTRA_BUS, "CAN");
 
         engine.service.context.startService(serviceIntent);
 
@@ -2386,8 +2222,8 @@ public class J1939 extends EngineBus {
         ibroadcast.setAction(VehicleBusConstants.BROADCAST_CAN_TX);
 
         //ibroadcast.putExtra("password", VehicleBusConstants.BROADCAST_PASSWORD);
-        ibroadcast.putExtra("id", frame.id);
-        ibroadcast.putExtra("data", frame.data);
+        ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_CAN_ID, frame.id);
+        ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_CAN_DATA, frame.data);
 
         engine.service.context.sendBroadcast(ibroadcast);
     } // broadcastTx()
@@ -2409,8 +2245,8 @@ public class J1939 extends EngineBus {
 
                 CanFrame frame = new CanFrame();
 
-                frame.id = intent.getIntExtra("id", -1);
-                frame.data = intent.getByteArrayExtra("data");
+                frame.id = intent.getIntExtra(VehicleBusConstants.BROADCAST_EXTRA_CAN_ID, -1);
+                frame.data = intent.getByteArrayExtra(VehicleBusConstants.BROADCAST_EXTRA_CAN_DATA);
 
                 receiveCANFrame(frame);
             } catch (Exception e) {
@@ -2418,6 +2254,7 @@ public class J1939 extends EngineBus {
             }
         }
     } // RxReceiver
+
 
 } // class J1939
 

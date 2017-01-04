@@ -11,8 +11,8 @@ android {
         applicationId "com.micronet.dsc.ats"
         minSdkVersion 15
         targetSdkVersion 15
-        versionCode 230
-        versionName "2.3.0"
+        versionCode 239
+        versionName "2.3.9"
     }
     buildTypes {
         release {

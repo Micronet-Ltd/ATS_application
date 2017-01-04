@@ -33,8 +33,8 @@ public class VehicleBusJ1708 {
 
     static final int SAFETY_MAX_OUTGOING_QUEUE_SIZE = 10; // just make sure this queue doesn't ever keep growing forever
 
-    J1708WriteRunnable j1708WriteRunnable = null; // thread for writing
-    J1708ReadRunnable j1708ReadRunnable = null; // thread for reading
+    static J1708WriteRunnable j1708WriteRunnable; // current thread for writing
+    static J1708ReadRunnable j1708ReadRunnable; // current thread for reading
 
 //    CanbusInterface j1708Interface = null;
 //    CanbusSocket j1708Socket = null;
@@ -180,6 +180,36 @@ public class VehicleBusJ1708 {
     } // start()
 
 
+    ///////////////////////////////////////////////////////
+    // stop()
+    //  called on shutdown
+    ///////////////////////////////////////////////////////
+    public void stop() {
+
+        try {
+            context.unregisterReceiver(txReceiver);
+        } catch(Exception e) {
+            // don't do anything
+        }
+
+
+        if (j1708ReadRunnable != null)
+            j1708ReadRunnable.cancelThread = true;
+        if (j1708WriteRunnable != null)
+            j1708WriteRunnable.cancelThread = true;
+
+        busWrapper.stop(BUS_NAME);
+    }
+
+
+    ///////////////////////////////////////////////////////
+    // stopAll()
+    //  just provides access to the wrapper's stopAll call,
+    //  It is better to call this before stop() if we know we will be stopping all buses
+    ///////////////////////////////////////////////////////
+    public void stopAll() {
+        busWrapper.stopAll();
+    }
 
 
     private Runnable busReadyCallback = new Runnable() {
@@ -208,15 +238,25 @@ public class VehicleBusJ1708 {
         if (busWrapper.getSocket() == null) return false;
 
         // Safety: make sure we cancel any previous thread if we are starting a new one
-        if (j1708ReadRunnable != null)
+        if (j1708ReadRunnable != null) {
             j1708ReadRunnable.cancelThread = true;
+         //   Log.v(TAG, "canceling j708 read thread");
+        } else {
+           // Log.v(TAG, " A j1708ReadRunnable is null");
+        }
 
+
+        //Log.v(TAG, "creating j708 read thread");
         j1708ReadRunnable = new J1708ReadRunnable(busWrapper.getSocket());
 
         // If we aren't unit testing, then start the thread
         if (!busWrapper.isUnitTesting) {
             Thread clientThread = new Thread(j1708ReadRunnable);
             clientThread.start();
+        }
+
+        if (j1708ReadRunnable != null) {
+          //  Log.v(TAG, "B j1708ReadRunnable is not null");
         }
 
         return true;
@@ -233,9 +273,12 @@ public class VehicleBusJ1708 {
         if (busWrapper.getSocket() == null) return false;
 
         // Safety: make sure we cancel any previous thread if we are starting a new one
-        if (j1708WriteRunnable != null)
+        if (j1708WriteRunnable != null) {
             j1708WriteRunnable.cancelThread = true;
+          //  Log.v(TAG, "canceling j708 write thread ");
+        }
 
+        //Log.v(TAG, "creating j708 write thread");
         j1708WriteRunnable = new J1708WriteRunnable(busWrapper.getSocket());
 
         // If we aren't unit testing, then start the thread
@@ -271,26 +314,6 @@ public class VehicleBusJ1708 {
     }
 
 
-    ///////////////////////////////////////////////////////
-    // stop()
-    //  called on shutdown
-    ///////////////////////////////////////////////////////
-    public void stop() {
-
-        try {
-            context.unregisterReceiver(txReceiver);
-        } catch(Exception e) {
-            // don't do anything
-        }
-
-
-        if (j1708ReadRunnable != null)
-            j1708ReadRunnable.cancelThread = true;
-        if (j1708WriteRunnable != null)
-            j1708WriteRunnable.cancelThread = true;
-
-        busWrapper.stop(BUS_NAME, busReadyCallback, null);
-    }
 
 
     ///////////////////////////////////////////////////////////////////
@@ -343,11 +366,13 @@ public class VehicleBusJ1708 {
 
                 if (!cancelThread) {
                     // Notify the main thread that we are ready for write
+
                     if ((callbackHandler != null) && (readyTxRunnable != null)) {
                         callbackHandler.post(readyTxRunnable);
                     }
                     Log.v(TAG, "J1708-Write thread ready");
                     isReady = true;
+
                 }
 
 
@@ -421,7 +446,6 @@ public class VehicleBusJ1708 {
 
                 J1708Frame inFrame = null;
 
-
                 if (!cancelThread) {
                     // Notify the main thread that we are ready for read
                     if ((callbackHandler != null) && (readyRxRunnable != null)) {
@@ -429,6 +453,7 @@ public class VehicleBusJ1708 {
                     }
                     Log.v(TAG, "J1708-Read thread ready");
                     isReady = true;
+
                 }
 
                 while (!cancelThread)  {
@@ -491,11 +516,11 @@ public class VehicleBusJ1708 {
         ibroadcast.setPackage(VehicleBusConstants.PACKAGE_NAME_ATS);
         ibroadcast.setAction(VehicleBusConstants.BROADCAST_J1708_RX);
 
-        ibroadcast.putExtra("elapsedRealtime", elapsedRealtime); // ms since boot
+        ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_TIMESTAMP, elapsedRealtime); // ms since boot
         //ibroadcast.putExtra("password", VehicleBusService.BROADCAST_PASSWORD);
-        ibroadcast.putExtra("priority", frame.getPriority());
-        ibroadcast.putExtra("id", frame.getId());
-        ibroadcast.putExtra("data", frame.getData());
+        ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_PRIORITY, frame.getPriority());
+        ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_ID, frame.getId());
+        ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_DATA, frame.getData());
 
         context.sendBroadcast(ibroadcast);
     } // broadcastRx
@@ -516,9 +541,9 @@ public class VehicleBusJ1708 {
                 }
                 */
 
-                int priority = intent.getIntExtra("priority", -1);
-                int id = intent.getIntExtra("id", -1);
-                byte[] data = intent.getByteArrayExtra("data");
+                int priority = intent.getIntExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_PRIORITY, -1);
+                int id = intent.getIntExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_ID, -1);
+                byte[] data = intent.getByteArrayExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_DATA);
 
                 if ((priority != -1) && (id != -1) && (data != null) && (data.length > 0)) {
                     J1708Frame frame = new J1708Frame(priority, id, data);

@@ -189,6 +189,11 @@ public class Engine {
         // remember we are cold starting
         service.state.writeState(State.ENGINE_WARM_START, (warmStart ? 1 : 0));
 
+        if (!warmStart) {
+            // also set the J1939 bus speed as unverified
+            service.state.writeState(State.J1939_BUS_VERIFIED, 0);
+        }
+
     } // setWarmStart()
 
 
@@ -213,10 +218,9 @@ public class Engine {
 
     ////////////////////////////////////////////////////////////////////
     // start()
-    //      "Start" the Engine monitoring, called when app is started
+    //      "Start" the Engine monitoring, called when ignition is turned on, or app started with ignition on
     // Parameters:
     //  serial: a device serial number to incorporate into any node names (like J1939)
-    //  coldStart: a cold start is the first start() since the device was powered (it may have changed vehicles in interim)
     ////////////////////////////////////////////////////////////////////
     public void start(String device_serial) {
 
@@ -229,6 +233,19 @@ public class Engine {
         if ((!j1939_enabled) && (!j1587_enabled)) {
             Log.v(TAG, "All buses disabled in config");
             isEnabled = false;
+
+            // we need to tell VBS to stop all buses, in case they were started in prior instance of ATS with different config
+
+            // stop J1939
+            j1939 = new J1939(this, warmStart, 0);
+            j1939.stopCanBus();
+            j1939 = null;
+
+            // stop J1587
+            j1587 = new J1587(this, warmStart);
+            j1587.stopJ1708bus();
+            j1587 = null;
+
             return;
         }
 
@@ -277,21 +294,27 @@ public class Engine {
         }
 
 
-
+        j1939 = new J1939(this, warmStart, device_serial_int);
         if (j1939_enabled) {
-            j1939 = new J1939(this, warmStart, device_serial_int);
             j1939.setAdditionalPGNs(getRawForwardPGNs());
             j1939.start();
+        } else {
+            // since ATS may have previously turned j1939 on if ATS was configured differently, we need to tell VBS to turn it off
+            j1939.stopCanBus();
+            j1939 = null;
         }
 
         // j1587 should be started AFTER j1939 and stopped BEFORE
 
         // if (J1587.isSupported()) {
         //    Log.i(TAG, "Starting J1587 bus");
-
+        j1587 = new J1587(this, warmStart);
         if (j1587_enabled) {
-            j1587 = new J1587(this, warmStart);
             j1587.start();
+        } else {
+            // since ATS may have previously turned j1708 on if ATS was configured differently, we need to tell VBS to turn it off
+            j1587.stopJ1708bus();
+            j1587 = null;
         }
 
 
@@ -305,7 +328,7 @@ public class Engine {
 
     ////////////////////////////////////////////////////////////////////
     // stop()
-    //      "Stop" the Engine monitoring, called when app is ended
+    //      "Stop" the Engine monitoring, called when app is ended or ignition turns off
     ////////////////////////////////////////////////////////////////////
     public void stop() {
 
@@ -1261,6 +1284,7 @@ public class Engine {
     ////////////////////////////////////////////////////////////////////////////
     // busStatusReceiver()
     //  get the status information from the vehicle bus modules
+    //  this is received regularly
     ////////////////////////////////////////////////////////////////////////////
     BusStatusReceiver busStatusReceiver = new BusStatusReceiver();
     class BusStatusReceiver extends BroadcastReceiver {
@@ -1281,18 +1305,18 @@ public class Engine {
                     return;
                 }
 */
+                // Watchdog: set that VBS is alive, we will error and try to restart VBS and if this is not updated regularly
                 isAlive = true;
-                last_alive_ertime = intent.getLongExtra("elapsedRealtime", 0);
-        //        int processId = intent.getIntExtra("processId", 0);
-        //        if (processId != vbus_processId) {
-        //            vbus_processId =processId;
-        //            Log.i(TAG, "Received PID " + vbus_processId + " for VBus Service");
-        //        }
+                last_alive_ertime = intent.getLongExtra(VehicleBusConstants.BROADCAST_EXTRA_TIMESTAMP, 0);
 
-                boolean cantx = intent.getBooleanExtra("cantx", false);
+
+                // check whether we are allowed to start transmitting on can
+                boolean cantx = intent.getBooleanExtra(VehicleBusConstants.BROADCAST_EXTRA_STATUS_CANTX, false);
                 if (cantx) {
+
                     if (j1939 != null) {
-                        j1939.busReadyTxCallback();
+                        int canBitrate = intent.getIntExtra(VehicleBusConstants.BROADCAST_EXTRA_STATUS_CANBITRATE, 0);
+                        j1939.busReadyTxCallback(canBitrate); // start transmitting J1939
                     }
                 }
 

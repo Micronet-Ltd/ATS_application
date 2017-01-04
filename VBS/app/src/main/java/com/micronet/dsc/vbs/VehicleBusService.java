@@ -2,6 +2,9 @@
 // VBusService:
 //  Handles communications with hardware regarding CAN and J1708
 //  can be started in a separate process (since interactions with the API are prone to jam or crash -- and take down the whole process when they do)
+//
+//  See VehicleBusConstants file for a list of actions and extras for this service
+//
 /////////////////////////////////////////////////////////////
 
 package com.micronet.dsc.vbs;
@@ -94,7 +97,7 @@ public class VehicleBusService extends Service {
         }
 
 
-        bus = intent.getStringExtra("bus");
+        bus = intent.getStringExtra(VehicleBusConstants.SERVICE_EXTRA_BUS);
 
         if (bus == null) {
             Log.e(TAG, "cannot start/stop service. must designate bus");
@@ -110,21 +113,27 @@ public class VehicleBusService extends Service {
             // if bus is J1708, then filter out all CAN messages so we don't get any before starting.
 
             if (bus.equals("J1708")) {
+                // remember that this was our last request
+                saveJ1708(true);
+
                 stopJ1708(false);
                 startJ1708();
             }
             else
             if (bus.equals("CAN")) {
-                int bitrate = intent.getIntExtra("bitrate", 250000);
-                boolean listen_only = intent.getBooleanExtra("listenOnly", false);
+                int bitrate = intent.getIntExtra(VehicleBusConstants.SERVICE_EXTRA_BITRATE, VehicleBusCAN.DEFAULT_BITRATE);
+                boolean auto_detect = intent.getBooleanExtra(VehicleBusConstants.SERVICE_EXTRA_AUTODETECT, false);
+                boolean skip_verify = intent.getBooleanExtra(VehicleBusConstants.SERVICE_EXTRA_SKIPVERIFY, false);
 
-                int[] ids = intent.getIntArrayExtra("hardwareFilterIds");
-                int[] masks = intent.getIntArrayExtra("hardwareFilterMasks");
+                int[] ids = intent.getIntArrayExtra(VehicleBusConstants.SERVICE_EXTRA_HARDWAREFILTER_IDS);
+                int[] masks = intent.getIntArrayExtra(VehicleBusConstants.SERVICE_EXTRA_HARDWAREFILTER_MASKS);
 
+                // remember that this was our last request
+                saveCAN(true, bitrate, auto_detect, ids, masks);
 
                 // and do it
                 stopCAN(false);
-                startCAN(bitrate, listen_only, ids, masks);
+                startCAN(bitrate, skip_verify, auto_detect, ids, masks, false);
             }
 
 
@@ -135,6 +144,7 @@ public class VehicleBusService extends Service {
             // ignore J1708 requests for now, J1708 is stopped same time as CAN
             if (bus.equals("CAN")) {
 
+                saveCAN(false, 0, false, null, null);
                 if (!isAnythingElseOn(VBUS_CAN)) {
                     stopSelf(); // nothing on, stop everything and exit
                 } else {
@@ -143,6 +153,8 @@ public class VehicleBusService extends Service {
             }
             else
             if (bus.equals("J1708")) {
+                saveJ1708(false);
+
                 if (!isAnythingElseOn(VBUS_J1708)) {
                     stopSelf(); // nothing on, stop everything and exit
                 } else {
@@ -191,10 +203,13 @@ public class VehicleBusService extends Service {
             stopSelf(); // nothing on, stop everything and exit
         }
 
-        if (enCan) { // enable CAN bus
+        // first, try to stop all running buses at the same time
+        stopAll();
+
+        if (enCan) { // enable CAN bus .. always do this before J1708 to prevent re-creating CAN bus when starting J1708
             int bitrate = state.readState(State.CAN_BITRATE);
-            if (bitrate == 0) bitrate = 250000;
-            boolean listen_only = state.readStateBool(State.FLAG_CAN_LISTENONLY);
+            if (bitrate == 0) bitrate = VehicleBusCAN.DEFAULT_BITRATE;
+            boolean auto_detect = state.readStateBool(State.FLAG_CAN_AUTODETECT);
 
             String idstring = state.readStateString(State.CAN_FILTER_IDS);
             String maskstring = state.readStateString(State.CAN_FILTER_MASKS);
@@ -215,12 +230,10 @@ public class VehicleBusService extends Service {
                 }
             }
 
-            stopCAN(false);
-            startCAN(bitrate, listen_only, ids, masks);
+            startCAN(bitrate, false, auto_detect, ids, masks, true);
         }
 
-        if (enJ1708) { // enable J1708 bus
-            stopJ1708(false);
+        if (enJ1708) { // enable J1708 bus now b/c it can get tacked onto CAN.
             startJ1708();
         }
 
@@ -245,47 +258,94 @@ public class VehicleBusService extends Service {
         }
     } // isAnythingElseOn()
 
+
+    ////////////////////////////////////////////////////////////////
+    // stopAll()
+    //  stop both the CAN and the J1708 bus if they are running
+    //  this is more efficient than the stopCAN() or stopJ1708() if we know that we will be stopping both buses at the same time.
+    ////////////////////////////////////////////////////////////////
+    void stopAll() {
+
+        // call the underlying wrapper's stopAll()
+
+        // my_can or my_j1708 is only used to provide us access to the underlying wrapper stopAll() call
+        // make sure we can use either one, because one or the other might be null if that bus is not running.
+
+        if (my_can != null) {
+            my_can.stopAll();
+        }
+        else
+        if (my_j1708 != null) {
+            my_j1708.stopAll();
+        }
+
+        // stop all buses
+        stopJ1708(true);
+        stopCAN(true);
+
+    } //stopAll()
+
+
+    ////////////////////////////////////////////////////////////////
+    // saveCAN()
+    // save CAN information to file so we can load it up on restart.
+    ////////////////////////////////////////////////////////////////
+    void saveCAN(boolean enabled, int bitrate, boolean auto_detect, int[] ids, int masks[]) {
+        Context context = getApplicationContext();
+
+        State state;
+        state = new State(context);
+
+        state.writeState(State.FLAG_CAN_ON, ( enabled ?  1 : 0));
+
+        if (enabled) {
+            // save more info about the CAN
+            state.writeState(State.CAN_BITRATE, bitrate);
+            state.writeState(State.FLAG_CAN_AUTODETECT, (auto_detect ? 1 : 0));
+
+            String idstring = "";
+            String maskstring = "";
+            if ((ids != null) && (masks != null)) {
+                for (int id : ids) {
+                    if (!idstring.isEmpty()) {
+                        idstring += ',';
+                    }
+                    idstring += id;
+                }
+
+                for (int mask : masks) {
+                    if (!maskstring.isEmpty()) {
+                        maskstring += ',';
+                    }
+                    maskstring += mask;
+                }
+            }
+            state.writeStateString(State.CAN_FILTER_IDS, idstring);
+            state.writeStateString(State.CAN_FILTER_MASKS, maskstring);
+        }
+    }
+
+
     ////////////////////////////////////////////////////////////////
     // startCAN()
     //  Start up the CAN bus with the given parameters
+    //  bitrate: the starting bitrate, e.g. 250000 or 500000
+    //  auto_detect: if true then will switch between bitrates until one is detected
+    //  skip_verify: if true then do not start in listen-only mode
+    //  ids[] : CAN IDs to use for filters
+    //  masks[] : corresponding can masks to use with the ids
+    //  load_last_confirmed: whether or not we should load the last confirmed bitrate from file
+    //      when service receives the "restart" action, then we will load this from file, otherwise we only use what is in memory
     ////////////////////////////////////////////////////////////////
-    void startCAN(int bitrate, boolean listen_only, int[] ids, int masks[]) {
+    void startCAN(int bitrate, boolean skip_verify, boolean auto_detect, int[] ids, int masks[], boolean load_last_confirmed) {
 
 
         if (hasStartedCAN) {
-            Log.w(TAG, "CAN already started. Ignoring Start.");
+            Log.w(TAG, "CAN already started. Ignoring subsequent Start.");
         }
 
         hasStartedCAN = true; // don't start again
         Context context = getApplicationContext();
-
-        // save this information so we can load it up on restart.
-        State state;
-        state = new State(context);
-
-        state.writeState(State.FLAG_CAN_ON, 1);
-        state.writeState(State.CAN_BITRATE, bitrate);
-        state.writeState(State.FLAG_CAN_LISTENONLY, (listen_only ? 1 : 0));
-
-        String idstring = "";
-        String maskstring = "";
-        if ((ids != null) && (masks != null)) {
-            for (int id : ids) {
-                if (!idstring.isEmpty()) {
-                    idstring += ',';
-                }
-                idstring += id;
-            }
-
-            for (int mask : masks) {
-                if (!maskstring.isEmpty()) {
-                    maskstring += ',';
-                }
-                maskstring += mask;
-            }
-        }
-        state.writeStateString(State.CAN_FILTER_IDS, idstring);
-        state.writeStateString(State.CAN_FILTER_MASKS, maskstring);
 
 /*
         // We CANNOT Start CAN after J1708. in this case must stop and restart J1708
@@ -301,7 +361,16 @@ public class VehicleBusService extends Service {
 
 
         my_can = new VehicleBusCAN(context, isUnitTesting);
-        my_can.start(bitrate, listen_only, canHardwareFilters);
+
+        if (load_last_confirmed)
+            my_can.loadConfirmedBitRate();
+
+        if (skip_verify) {
+            // we've requested to treat this bitrate as confirmed
+            my_can.setConfirmedBitRate(bitrate);
+        }
+
+        my_can.start(bitrate, auto_detect, canHardwareFilters);
 
 /*
         // now we need to restart J1708 again if we previously stopped it
@@ -323,6 +392,7 @@ public class VehicleBusService extends Service {
     ////////////////////////////////////////////////////////////////
     void stopCAN(boolean show_error) {
 
+
         if (!hasStartedCAN) {
             if (show_error) {
                 Log.w(TAG, "CAN not started. Ignoring Stop.");
@@ -330,9 +400,6 @@ public class VehicleBusService extends Service {
             return;
         }
 
-        // remember this to file
-        State state = new State(getApplicationContext());
-        state.writeState(State.FLAG_CAN_ON, 0);
 
 
         // remove callbacks first in case the stop() jams
@@ -347,6 +414,22 @@ public class VehicleBusService extends Service {
         hasStartedCAN = false;
 
     } // stopCAN()
+
+
+    ////////////////////////////////////////////////////////////////
+    // saveJ1708()
+    //  save status of the J1708 bus to non-volatile memory
+    ////////////////////////////////////////////////////////////////
+    void saveJ1708(boolean enabled) {
+
+        Context context = getApplicationContext();
+
+        // remember this to file
+        State state = new State(context);
+        state.writeState(State.FLAG_J1708_ON, (enabled ? 1 : 0));
+
+
+    }
 
 
 
@@ -369,10 +452,6 @@ public class VehicleBusService extends Service {
         hasStartedJ1708 = true; // don't start again
         Context context = getApplicationContext();
 
-        // remember this to file
-        State state = new State(context);
-        state.writeState(State.FLAG_J1708_ON, 1);
-
         my_j1708 = new VehicleBusJ1708(context, isUnitTesting);
         my_j1708.start();
 
@@ -390,16 +469,13 @@ public class VehicleBusService extends Service {
     ////////////////////////////////////////////////////////////////
     void stopJ1708(boolean show_error) {
 
+
         if (!hasStartedJ1708) {
             if (show_error) {
                 Log.w(TAG, "J1708 not started. Ignoring Stop.");
             }
             return;
         }
-
-        // remember this to file
-        State state = new State(getApplicationContext());
-        state.writeState(State.FLAG_J1708_ON, 0);
 
 
         // remove callbacks first in case stop() jams
@@ -414,12 +490,6 @@ public class VehicleBusService extends Service {
         hasStartedJ1708 = false;
 
     } // stopJ1708()
-
-
-
-
-
-
 
 
 
@@ -446,53 +516,14 @@ public class VehicleBusService extends Service {
 
         return canHardwareFilters;
 
-        /*
 
-        // count the number we need
-        int count = 0;
-        int lastmask = -1;
-
-        for (int mask : masks) {
-            if (mask != lastmask) count++;
-        }
-
-
-        CanbusHardwareFilter[] canHardwareFilters = new CanbusHardwareFilter[count];
-
-        int filter_i = 0;
-        int start_mask_i = 0;
-        CanbusHardwareFilter chf;
-        int i;
-
-        for (i = 0; i < masks.length && i < ids.length; i++) {
-
-            if ((masks[i] != lastmask) && (i > 0)) {
-                // new mask
-                chf = new CanbusHardwareFilter(Arrays.copyOfRange(ids, start_mask_i, i-1),lastmask, CanbusFrameType.EXTENDED);
-                start_mask_i = i; // next filter will start here.
-
-                if (filter_i < count) { // safety
-                    canHardwareFilters[filter_i] = chf;
-                    filter_i++;
-                }
-            }
-
-        } // for each one
-
-
-        if (i > 0) { // last one
-            chf = new CanbusHardwareFilter(Arrays.copyOfRange(ids, start_mask_i, i - 1), lastmask, CanbusFrameType.EXTENDED);
-            if (filter_i < count) { // safety
-                canHardwareFilters[filter_i] = chf;
-            }
-        }
-
-        return canHardwareFilters;
-        */
     } // createCombinedFilters()
 
 
-
+    ///////////////////////////////////////////////////////////////
+    // broadcastStatus()
+    //  sends an android broadcast with the status of all buses
+    ///////////////////////////////////////////////////////////////
     void broadcastStatus() {
 
         Context context = getApplicationContext();
@@ -509,13 +540,14 @@ public class VehicleBusService extends Service {
         //ibroadcast.putExtra("processId", processId); // so this can be killed?
 
         if (my_can != null) { // safety
-            ibroadcast.putExtra("canrx", my_can.isReadReady());
-            ibroadcast.putExtra("cantx", my_can.isWriteReady());
+            ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_STATUS_CANRX, my_can.isReadReady());
+            ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_STATUS_CANTX, my_can.isWriteReady());
+            ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_STATUS_CANBITRATE, my_can.getBitrate());
         }
 
         if (my_j1708 != null) { // safety
-            ibroadcast.putExtra("j1708rx", my_j1708.isReadReady());
-            ibroadcast.putExtra("j1708tx", my_j1708.isWriteReady());
+            ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_STATUS_J1708RX, my_j1708.isReadReady());
+            ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_STATUS_J1708TX, my_j1708.isWriteReady());
         }
 
         context.sendBroadcast(ibroadcast);

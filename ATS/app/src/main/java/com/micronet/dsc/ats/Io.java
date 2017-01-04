@@ -98,6 +98,8 @@ public class Io {
 
         public boolean flagEngineStatus; // engine on or off .. used in idling, etc..
         boolean flagBadAlternator, flagLowBattery;
+
+        boolean flagWaitEngineOnMessage; // are we waiting to send an engine on message ?
     }
     Status status = new Status(); // just to make passing these variables around easier
     //long savedPhysicalElapsedTime = 0;
@@ -121,7 +123,7 @@ public class Io {
 
     //////////////////////////////////////////
     // Other
-    int ENGINE_ON_TRIGGER_DELAY_MS = 10000; // 10 second delay to make sure enough time to communicate with all buses
+    int ENGINE_ON_TRIGGER_DELAY_MS = 15000; // 15 second delay to make sure enough time to communicate with all buses
     /*
     //////////////////////////////////////////
     // Items to manage sensor events (currently disabled)
@@ -142,6 +144,10 @@ public class Io {
         //  (since these could take some time to determine and/or we don't want to resend messages)
         status.flagBadAlternator = service.state.readStateBool(State.FLAG_BADALTERNATOR_STATUS);
         status.flagLowBattery = service.state.readStateBool(State.FLAG_LOWBATTERY_STATUS);
+
+
+        // We don't read the Engine Status or the Wait Engine On Message because we want to send these again
+        //  in case we gained or lost communication with the engine ??
 
 
         //USE_INPUT6_AS_IGNITION = service.state.readStateBool(State.FLAG_USING_INPUT6_AS_IGNITION);
@@ -229,6 +235,13 @@ public class Io {
             ignitionWakeLock = service.power.changeWakeLock(WAKELOCK_IGNITION_NAME, ignitionWakeLock, 0);
             service.position.start();
             service.engine.start(deviceConstants.deviceId);
+
+            // check if we are waiting to send the engine on message
+            if ((status.flagEngineStatus) && (status.flagWaitEngineOnMessage)) {
+                // we are, start the timer, etc..
+                startWaitEngineOnMessage();
+            }
+
         }
     } // finishStart()
     ////////////////////////////////////////////////////////////////////
@@ -240,6 +253,13 @@ public class Io {
         Log.v(TAG, "stop()");
 
         ioInitReceiver.finish = false; // we're not starting
+
+
+        // remove the delayed engine-on message task if it was waiting
+        if (mainHandler != null) {
+            mainHandler.removeCallbacks(delayedEngineOnTask);
+        }
+
 
         // stop the IO Service
         Intent serviceIntent = new Intent(service.context, IoService.class);
@@ -567,10 +587,15 @@ public class Io {
                         Log.i(TAG, "Engine Status Off");
                         status.flagEngineStatus = false;
                         service.state.writeState(State.FLAG_ENGINE_STATUS, 0); // remember this
-                        service.addEvent(EventType.EVENT_TYPE_ENGINE_STATUS_OFF);
+                        // if we sent the ON, then send the off
+                        if (!status.flagWaitEngineOnMessage) // if we aren't waiting to send the engine-on message, send the off
+                            service.addEvent(EventType.EVENT_TYPE_ENGINE_STATUS_OFF);
 
                         service.engine.turnEngineOn(false); // used to start fuel updates, etc..
                     }
+
+                    // stop waiting to send an engine on message, if we were waiting
+                    stopWaitEngineOnMessage();
 
                     // stop Idling (if needed) since engine status is now off
                     service.position.stopIdling();
@@ -617,6 +642,32 @@ public class Io {
         status.battery_voltage = (short) (voltage * 10.0);
     }
 
+
+    //////////////////////////////////////////////////////////
+    // startWaitEngineOnMessage()
+    //  start waiting to send an engine on message, will be sent after a delay (if still needed)
+    //////////////////////////////////////////////////////////
+    void startWaitEngineOnMessage() {
+        status.flagWaitEngineOnMessage= true; // we have not sent the on message yet
+        service.state.writeState(State.FLAG_WAIT_ENGINE_ON_MESSAGE, 1); // remember this
+        mainHandler.postDelayed(delayedEngineOnTask, ENGINE_ON_TRIGGER_DELAY_MS);
+    }
+
+    //////////////////////////////////////////////////////////
+    // stopWaitEngineOnMessage()
+    //  stop waiting to send an engine on message (it was sent or is no longer needed)
+    //////////////////////////////////////////////////////////
+    void stopWaitEngineOnMessage() {
+        status.flagWaitEngineOnMessage = false; // we have not sent the on message yet
+        service.state.writeState(State.FLAG_WAIT_ENGINE_ON_MESSAGE, 0); // remember this
+
+        if (mainHandler != null) {
+            mainHandler.removeCallbacks(delayedEngineOnTask);
+        }
+
+    }
+
+
     //////////////////////////////////////////////////////////
     // checkEngineStatus()
     //  checks whether engines status should be on or off
@@ -635,6 +686,8 @@ public class Io {
                 Log.i(TAG, "Engine Status On");
                 status.flagEngineStatus = true;
                 service.state.writeState(State.FLAG_ENGINE_STATUS, 1); // remember this
+
+
                 int messages_bf = service.config.readParameterInt(Config.SETTING_ENGINE_STATUS, Config.PARAMETER_ENGINE_STATUS_MESSAGES);
 
                 if ((messages_bf & Config.MESSAGES_BF_ON) != 0) {
@@ -644,8 +697,9 @@ public class Io {
                         // We shouldn't get here, but as a safety just add this event without delay ??
                         Codec codec = new Codec(service);
                         service.addEventWithData(EventType.EVENT_TYPE_ENGINE_STATUS_ON, codec.dataForEngineOn());
+                        stopWaitEngineOnMessage();
                     } else {
-                        mainHandler.postDelayed(delayedEngineOnTask, ENGINE_ON_TRIGGER_DELAY_MS);
+                        startWaitEngineOnMessage();
                 }
                 }
 
@@ -1169,6 +1223,7 @@ public class Io {
                 // to try and talk to all the buses and get VIN, etc..
                 Codec codec = new Codec(service);
                 service.addEventWithData(EventType.EVENT_TYPE_ENGINE_STATUS_ON, codec.dataForEngineOn());
+                stopWaitEngineOnMessage(); // since we sent this, we no longer need to wait to send it
             } catch(Exception e) {
                 Log.e(TAG + ".delayedEngineOnTask", "Exception: " + e.toString(), e);
             }
