@@ -37,6 +37,10 @@ public class Ota {
 
     public static final int CHECK_TIMER_MS_NORMAL = 500; // every 500 ms do a check for messages?
     public static final int CHECK_TIMER_MS_JUSTSENT = 200; // check again in 200 ms after sending something
+
+
+    public static final int WATCHDOG_AIRPLANE_TOGGLE_ON_MS = 4000; // keep airplane mode on for 4000 ms when toggling it.
+
     /*
     public static final int[] BACKOFF_DELAYS_SECONDS = {30, // 30 seconds
                                                     60, // 1 min
@@ -57,6 +61,7 @@ public class Ota {
 
 
     int watchdogStage = 0; // what stage the com watchdog is at.
+    int airplaneToggleStage = 0; // what stage the airplane toggle portion of com watchdog is at (turn on or turn off)
 
     // This app can communicate with multiple "Servers"
 
@@ -610,12 +615,61 @@ public class Ota {
             Log.v(TAG, "clearWatchdog()");
         }
 
+        mainHandler.removeCallbacks(airplaneToggleTask);
         mainHandler.removeCallbacks(watchdogTask);
         watchdogStage= 0;
 
     } // clearWatchdog()
 
 
+
+    private void startAirplaneToggling() {
+        airplaneToggleStage = 0;
+        mainHandler.postDelayed(airplaneToggleTask, 500); // try to start toggling, use minimal initial delay (0.5 seconds)
+    }
+
+    ///////////////////////////////////////////////////////////////
+    // airplaneToggleTask()
+    //  Timer that controls toggling on and off of airplane mode when started by the com watchdog
+    ///////////////////////////////////////////////////////////////
+    private Runnable airplaneToggleTask = new Runnable() {
+
+        @Override
+        public void run() {
+            try {
+                Log.i(TAG, "Server-Comm Watchdog airplane mode toggle step " + airplaneToggleStage );
+
+                int nextseconds;
+
+                switch (airplaneToggleStage) {
+
+                    case 0: // Enter Airplane Mode
+                        service.addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_OTA_STAGE_AIRPLANEMODE);
+                        service.power.setAirplaneMode(true);
+                        airplaneToggleStage |= 1;
+                        mainHandler.postDelayed(airplaneToggleTask, WATCHDOG_AIRPLANE_TOGGLE_ON_MS); // come back in four seconds to turn airplane mode off
+                        break;
+                    case 1:
+                        service.power.setAirplaneMode(false);
+
+                        nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_RETRY_AIRPLANE_SECONDS);
+
+                        airplaneToggleStage = 0; // restart
+                        if (nextseconds > 0) {
+                            // come back in a bit to toggle airplane mode again
+                            mainHandler.postDelayed(airplaneToggleTask, nextseconds * 1000); // convert from seconds to ms
+                        }
+                        break;
+                }
+            } catch(Exception e) {
+                Log.e(TAG + ".airplaneToggleTask", " + Exception (Stage " + airplaneToggleStage + "): " + e.toString(), e);
+                mainHandler.postDelayed(airplaneToggleTask, 2000); // not sure what to do ... try again in 2 sec ?
+                return;
+            }
+
+        }
+
+    }; // airplaneToggleTask()
 
     ///////////////////////////////////////////////////////////////
     // watchdogTask()
@@ -644,18 +698,11 @@ public class Ota {
                         break;
 
                     case 20: // Enter airplane mode
-                        service.addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_OTA_STAGE_AIRPLANEMODE);
-                        service.power.setAirplaneMode(true);
-                        mainHandler.postDelayed(watchdogTask, 2000); // come back in two seconds to turn it back on
-                        watchdogStage++; // go to next step in this stage
-                        break;
-
-                    case 21: // Exit airplane mode
-                        service.power.setAirplaneMode(false);
+                        startAirplaneToggling();
                         escalateWatchdog(); // escalate to next stage
                         break;
 
-                    case 30: // shutdown the the device
+                    case 30: // shutdown the device
                         service.addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_OTA_STAGE_REBOOT);
                         service.power.powerDown();
                         break;
@@ -920,7 +967,7 @@ public class Ota {
             if (maxAttempts == 0) {
                 Log.e(TAG, "Unable to ACK RESTART message before timing out, restarting without ACK");
             }
-            service.power.restartAtsProcess();
+            service.power.restartAtsProcess(Power.RESTART_REASON_OTA_REQUEST);
         } else
         if (item.event_type_id == EventType.EVENT_TYPE_CLEAR_QUEUE) {
             // process this ack

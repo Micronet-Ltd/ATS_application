@@ -23,6 +23,7 @@
 
     <application
         android:allowBackup="true"
+        android:name =".AtsApplication"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/AppTheme" >
@@ -43,6 +44,7 @@
             android:exported="false" >
         </service>
 
+
         <receiver
             android:name=".AlarmReceiver"
             android:enabled="true" >
@@ -52,6 +54,17 @@
                 <action android:name="com.micronet.dsc.ats.restartservice" />
             </intent-filter>
         </receiver>
+
+
+        <service
+            android:name=".BindingService"
+            android:enabled="true"
+            android:exported="true" >
+            <intent-filter>
+                <action android:name="com.micronet.dsc.ats.BIND"/>
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".ExternalReceiver"
             android:enabled="true" >

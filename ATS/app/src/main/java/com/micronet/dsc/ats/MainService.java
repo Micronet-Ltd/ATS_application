@@ -91,6 +91,8 @@ public class MainService extends Service {
     LocalMessage local;
 
     static boolean isUnitTesting = false; // this is set when we unit test to deal with threading, etc..
+    static MainService initializedServiceInstance = null; // keep track of the last initialized service instance
+
     boolean isAlreadyRunning = false;
 
     long lastRunningElapsedTime; // the last time we knew for sure we were running
@@ -109,6 +111,9 @@ public class MainService extends Service {
     }
 
 
+    public static MainService getInitializedService() {
+        return initializedServiceInstance;
+    }
 
 
     ///////////////////////////////////////////
@@ -117,15 +122,20 @@ public class MainService extends Service {
     ///////////////////////////////////////////
     public void initializeObjects(Context context) {
 
+
+        Log.i(TAG, "Initializing: ATS version " + BuildConfig.VERSION_NAME);
+
+        initializedServiceInstance  = null;
         isAlreadyRunning = false;
 
         this.context = context;
 
         config = new Config(context);
-        int config_files_used = config.open();
+        config.open();
 
         codemap = new CodeMap(context);
-        int codemap_files_used = codemap.open();
+        codemap.open();
+
         state = new State(context);
 
         local = new LocalMessage(this);
@@ -144,19 +154,32 @@ public class MainService extends Service {
 
         engine = new Engine(this);
 
-        if ((config_files_used > 0) || (codemap_files_used > 0)) {
-            // we loaded an alternate configuration file, add a message to the queue
+
+
+        // After this point we can add events to the queue
+        initializedServiceInstance = this;
+
+
+
+        // check if we marked that we changed any configuration files while the service was "off"
+        int config_file_types_changed = state.readState(State.PRECHANGED_CONFIG_FILES_BF);
+        if (config_file_types_changed != 0) {
+            // we marked something as having been changed, add a message to the queue
             // Extra data:
             //      |1 = configuration.xml replaced
             //      |2 = moeventcodes.xml replaced
             //      |4 = mteventcodes.xml replaced
             addEventWithExtra(EventType.EVENT_TYPE_CONFIGURATION_REPLACED,
-                    (config_files_used & 1) + ((codemap_files_used & 3) << 1)
+                    (config_file_types_changed)
             );
+
+            // and clear out this saved field so that we don't always re-trigger the message next time.
+            state.writeState(State.PRECHANGED_CONFIG_FILES_BF, 0);
 
         } else {
             Log.i(TAG, "No new configuration files found");
         }
+
 
 
     } // initializeObjects()
@@ -204,7 +227,6 @@ public class MainService extends Service {
         // The service is being created
 
         processId = android.os.Process.myPid();
-        Log.i(TAG, "Service Created: ATS version " + BuildConfig.VERSION_NAME);
 
 
         StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder()
@@ -268,6 +290,9 @@ public class MainService extends Service {
         boolean doTriggerRestartEvent = true;
 
 
+        String restart_reason = null; // we can pass a reason for restarting
+
+
         // we will send a message when we are booted up, and a resume message if we are not already running
 
 
@@ -279,7 +304,7 @@ public class MainService extends Service {
                 if (action.equals(SERVICE_ACTION_WD_RESTART)) {
                     if (isAlreadyRunning) {
                         Log.i(TAG, " (Started From Watchdog Error)");
-                        power.restartAtsProcess();
+                        power.restartAtsProcess(Power.RESTART_REASON_WATCHDOG);
                         return START_NOT_STICKY;
                     } else {
                         Log.i(TAG, " (Started From Watchdog Error -- Not previously running)");
@@ -379,13 +404,19 @@ public class MainService extends Service {
                 }
 
             } else if (restart_id == 1) {
-                String source = intent.getStringExtra("source");
-                Log.i(TAG, " (Started From Process Killer: source = " + source);
+
+                // remember the reason for this restart
+                restart_reason = intent.getStringExtra("reason");
+                Log.i(TAG, " (Started From Process Killer: reason = " + restart_reason);
+
+
+
+
 
                 // We may need to add a message to queue if this was started from an external process killer
 
-                if ((source != null) && (!source.isEmpty())) {
-                    if (source.equals(WatchdogService.SERVICE_EXTRA_SOURCE_NAME)) {
+                if ((restart_reason != null) && (!restart_reason.isEmpty())) {
+                    if (restart_reason.equals(WatchdogService.SERVICE_EXTRA_SOURCE_NAME)) {
                         //Log.i(TAG, " (killed by external Watchdog Service -- some data might be lost)");
                         addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_EXTERNAL_WATCHDOG);
                     }
@@ -453,7 +484,7 @@ public class MainService extends Service {
 
         if (doTriggerRestartEvent) {
             clearEventSequenceIdIfNeeded();
-            byte[] data = Codec.dataForServiceRestart();
+            byte[] data = Codec.dataForServiceRestart(restart_reason);
             addEventWithData(EventType.EVENT_TYPE_RESTART, data); // service restarted
         }
 
@@ -528,7 +559,7 @@ public class MainService extends Service {
 
         // OnDestroy() is NOT guaranteed to be called, and won't be for instance
         //  if the app is updated
-        //  if ths system needs RAM quickly
+        //  if the system needs RAM quickly
         //  if the user force-stops the application
 
 

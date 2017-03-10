@@ -72,6 +72,11 @@ public class State {
 
 
 
+    public static final int PRECHANGED_CONFIG_FILES_BF = 120; // id for bitfield containing types of config files (settings, mo , mt)
+                                                            // that were changed while service was not running
+                                                            // see EventType class for file types
+
+
 
     public static final int VERSION_SPECIFIC_CODE = 200; // can be used to see if we executed code needed to run once for this version
 
@@ -201,5 +206,19 @@ public class State {
 
         return array;
     }
+
+
+    //////////////////////////////////////////////////////////
+    // setFlags()
+    //  combines the given flags with those that were already stored in the field
+    //  (ORs the given bitfield with the existing bitfield in state file)
+    //////////////////////////////////////////////////////////
+    public boolean setFlags(int state_id, int new_flags ) {
+        int old_flags = readState(state_id);
+        new_flags |= old_flags;
+        return writeState(state_id, new_flags);
+    }
+
+
 
 } // Class State

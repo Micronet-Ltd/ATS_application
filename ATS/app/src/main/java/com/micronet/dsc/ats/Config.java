@@ -68,6 +68,7 @@ public class Config {
     public static final int SETTING_INPUT_GP3 = 13;
     public static final int SETTING_INPUT_GP4 = 14;
     public static final int SETTING_INPUT_GP5 = 15;
+    public static final int SETTING_DISABLED_16 = 16; // old Input 6 Setting
     public static final int SETTING_INPUT_GP6 = 24;
         public static final int PARAMETER_INPUT_GP_BIAS = 0;
         public static final int PARAMETER_INPUT_GP_TENTHS_DEBOUNCE_TOACTIVE = 1;
@@ -79,6 +80,7 @@ public class Config {
         public static final int PARAMETER_MOVING_THRESHOLD_CMS = 0; // speed cm / s
     public static final int SETTING_IDLING = 18;
         public static final int PARAMETER_IDLING_SECONDS = 0;
+        public static final int PARAMETER_IDLING_MESSAGES = 1;
     public static final int SETTING_SPEEDING = 19;
         public static final int PARAMETER_SPEEDING_CMS = 0; // speed cm / s
         public static final int PARAMETER_SPEEDING_SECONDS = 1; // speed cm / s
@@ -95,9 +97,10 @@ public class Config {
         public static final int PARAMETER_SERVERCOMMUNICATION_NONCELLULAR_OK = 0; // boolean, set if wifi should be used
     // 24 is Input GP6, see above
     public static final int SETTING_COMWATCHDOG = 25;
-        public static final int PARAMETER_COMWATCHDOG_TIME1 = 0; // seconds
-        public static final int PARAMETER_COMWATCHDOG_TIME2 = 1; // seconds
-        public static final int PARAMETER_COMWATCHDOG_TIME3 = 2; // seconds
+        public static final int PARAMETER_COMWATCHDOG_TIME1 = 0; // udp socket reset seconds
+        public static final int PARAMETER_COMWATCHDOG_TIME2 = 1; // start airplane toggle seconds
+        public static final int PARAMETER_COMWATCHDOG_TIME3 = 2; // shuit down device seconds
+        public static final int PARAMETER_COMWATCHDOG_RETRY_AIRPLANE_SECONDS = 3; // multiple airplane toggles
     public static final int SETTING_POWER = 26;
         public static final int PARAMETER_INITIAL_KEEPAWAKE = 0; // seconds
     public static final int SETTING_SECONDARY_SERVER_ADDRESS = 27; // Destination Server IP  | Server Port
@@ -149,14 +152,14 @@ public class Config {
             "1|20|40|1800|1|0", // Input 5: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
             "", // Old Input6 -- not used
             "130", // Moving Threshold: cm/s
-            "300", // Idling: seconds
+            "300|2", // Idling: seconds, bf messages
             "3000|10", // Speeding: cm/s , seconds
             "250|15", // Acceleration: cm/s^2, 1/10 seconds
             "300|15", // Braking: cm/s^2, 1/10 seconds
             "200|20", // Cornering: cm/s^2, 1/10 seconds
             "0", // Do not send packets if cellular not active
             "1|20|40|0|0|0", // Input 6: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
-            "900|120|120", // server watchdog
+            "900|120|120|0", // server communication watchdog
             "30", // initial keep-awake
             "|0", // secondary server address
             "0", // secondary server port
@@ -172,6 +175,7 @@ public class Config {
 
 
     public static int[] DISABLED_SETTINGS = {
+            SETTING_DISABLED_16
 /*            SETTING_SCHEDULED_WAKEUP,
             SETTING_LOW_BATTERY_STATUS,
             SETTING_BAD_ALTERNATOR_STATUS,
@@ -202,6 +206,19 @@ public class Config {
 
 
     /////////////////////////////////////////////////////////////////
+    // init()
+    // attempt copy the file from alternate location to primary before opening
+    //  Should only be called once per process and MUST be called before open()
+    /////////////////////////////////////////////////////////////////
+    public static int init() {
+
+        Log.d(TAG, "Init shared prefs " + FILENAMEKEY);
+        boolean file_copied = copyFile(FILENAME_ALTERNATE_PATH, FILENAME_STANDARD_PATH, FILENAMEKEY + ".xml");
+        return (file_copied ? EventType.CONFIG_FILE_SETTINGS : 0);
+    }
+
+
+    /////////////////////////////////////////////////////////////////
     //  open():
     //      opens the config file
     //  Returns: 0 if the standard location was opened
@@ -211,17 +228,17 @@ public class Config {
         Log.d(TAG, "Opening shared prefs " + FILENAMEKEY);
         try {
 
-            boolean file_copied = copyFile(FILENAME_ALTERNATE_PATH, FILENAME_STANDARD_PATH, FILENAMEKEY + ".xml");
-
             sharedPref = context.getSharedPreferences(
                     FILENAMEKEY, Context.MODE_PRIVATE | Context.MODE_MULTI_PROCESS);
 
-            return (file_copied ? 1 : 0);
         } catch (Exception e) {
             Log.e(TAG, "Error opening prefs " + e.toString(), e);
             throw e;
         }
+
+        return 0;
     }
+
 
 
     ///////////////////////////////////////////////////
@@ -435,7 +452,7 @@ public class Config {
     ///////////////////////////////////////////////////
     public boolean settingExists(int setting_id) {
 
-        if ((setting_id < 0) || (setting_id >= SETTING_DEFAULTS.length))
+        if ((setting_id <= 0) || (setting_id >= SETTING_DEFAULTS.length))
             return false; // this is an invalid feature
 
 
@@ -592,6 +609,9 @@ public class Config {
 
         new ECR(EventType.EVENT_TYPE_LOW_BATTERY_ON, Config.SETTING_LOW_BATTERY_STATUS, Config.PARAMETER_LOW_BATTERY_STATUS_MESSAGES, Config.MESSAGES_BF_ON),
         new ECR(EventType.EVENT_TYPE_LOW_BATTERY_OFF, Config.SETTING_LOW_BATTERY_STATUS, Config.PARAMETER_LOW_BATTERY_STATUS_MESSAGES, Config.MESSAGES_BF_OFF),
+
+        new ECR(EventType.EVENT_TYPE_IDLING_ON, Config.SETTING_IDLING, Config.PARAMETER_IDLING_MESSAGES, Config.MESSAGES_BF_ON),
+        new ECR(EventType.EVENT_TYPE_IDLING_OFF, Config.SETTING_IDLING, Config.PARAMETER_IDLING_MESSAGES, Config.MESSAGES_BF_OFF),
 
         new ECR(EventType.EVENT_TYPE_INPUT1_ON, Config.SETTING_INPUT_GP1, Config.PARAMETER_INPUT_GP_MESSAGES, Config.MESSAGES_BF_ON),
         new ECR(EventType.EVENT_TYPE_INPUT1_OFF, Config.SETTING_INPUT_GP1, Config.PARAMETER_INPUT_GP_MESSAGES, Config.MESSAGES_BF_OFF),

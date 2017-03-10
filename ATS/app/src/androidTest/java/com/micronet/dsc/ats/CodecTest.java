@@ -174,15 +174,16 @@ public class CodecTest extends AndroidTestCase {
 
         queueItem.event_type_id = EventType.EVENT_TYPE_RESTART;
         codec = new Codec(service);
-        queueItem.additional_data_bytes = codec.dataForServiceRestart(); // boot_reason
+        queueItem.additional_data_bytes = codec.dataForServiceRestart("unknown"); // boot_reason
 
         message = codec.encodeMessage(queueItem, connectInfo);
 
         defaultExpectedMessage[12] = (byte) EventType.EVENT_TYPE_RESTART;
 
         byte[] expectedRestartData = {
-                0x02, 0x00,
-                ATS_VERSION_LSB, ATS_VERSION_MSB // current build version, set these appropriately
+                0x03, 0x00,
+                ATS_VERSION_LSB, ATS_VERSION_MSB, // current build version, set these appropriately
+                0 // unknown reason
         };
 
         expectedData = expectedRestartData;

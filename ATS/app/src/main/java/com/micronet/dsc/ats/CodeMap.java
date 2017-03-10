@@ -33,25 +33,39 @@ public class CodeMap {
 
 
     /////////////////////////////////////////////////////////////////
-    //  open():
-    //      opens the config file
-    //  Returns: 0 if the standard location was opened
-    //           |1 if the alternate location was opened for MO file
-    //           |2 if the alternate location was opened for MT file
+    // init()
+    // attempt copy the file from alternate location before attempting to open the shared prefs
+    //  MUST be called before open()
     /////////////////////////////////////////////////////////////////
-    public int open() {
+    public static int init() {
 
         boolean mo_copied = Config.copyFile(FILENAME_ALTERNATE_PATH, FILENAME_STANDARD_PATH, MO_FILENAME + ".xml");
         boolean mt_copied = Config.copyFile(FILENAME_ALTERNATE_PATH, FILENAME_STANDARD_PATH, MT_FILENAME + ".xml");
+
+        return (mo_copied  ? EventType.CONFIG_FILE_MOMAP : 0) | (mt_copied ? EventType.CONFIG_FILE_MTMAP : 0);
+    }
+
+
+    /////////////////////////////////////////////////////////////////
+    //  open():
+    //      opens the config file
+    //  Returns: a bitfield:
+    //           0 if the standard location was opened
+    //           |2 if the alternate location was opened for MO file
+    //           |4 if the alternate location was opened for MT file
+    /////////////////////////////////////////////////////////////////
+    public int open() {
+
+        // attempt copy the file from alternate to primary location before doing anything else
 
         mtSharedPref = context.getSharedPreferences(
                 MT_FILENAME, Context.MODE_PRIVATE);
         moSharedPref = context.getSharedPreferences(
                 MO_FILENAME, Context.MODE_PRIVATE);
 
-        return (mo_copied  ? 1 : 0) + (mt_copied ? 2 : 0);
-
+        return 0;
     } // open()
+
 
 
     ///////////////////////////////////////////////////
@@ -59,13 +73,24 @@ public class CodeMap {
     //  deletes ALL mappings and restores factory default
     ///////////////////////////////////////////////////
     public void clearAll() {
-        SharedPreferences.Editor moEditor = moSharedPref.edit();
-        moEditor.clear().commit();
 
-        SharedPreferences.Editor mtEditor = moSharedPref.edit();
-        mtEditor.clear().commit();
+        clearAllMO();
+        clearAllMT();
 
     }
+
+
+    public void clearAllMT() {
+
+        SharedPreferences.Editor mtEditor = mtSharedPref.edit();
+        mtEditor.clear().commit();
+    } // clearSetting()
+
+    public void clearAllMO() {
+
+        SharedPreferences.Editor moEditor = moSharedPref.edit();
+        moEditor.clear().commit();
+    } // clearSetting()
 
 
     ///////////////////////////////////////////////////

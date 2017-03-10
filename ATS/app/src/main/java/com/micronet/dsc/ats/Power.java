@@ -54,6 +54,13 @@ public class Power {
     private static final String WAKELOCK_HEARTBEAT_NAME = "ATS_HEARTBEAT";
     private static final String WAKELOCK_SCHEDULED_NAME = "ATS_SCHEDULEDWAKEUP";
 
+
+    public static final String RESTART_REASON_WATCHDOG = "watchdog"; // restarted by a watchdog
+    public static final String RESTART_REASON_OTA_REQUEST = "ota"; // restarted by a request over OTA/UDP
+    public static final String RESTART_REASON_LOCAL_REQUEST = "local"; // restarted by a local app via bind or broadcast
+
+
+
     // To start ResetRB:
     private static final String PACKAGE_NAME_RESETRB = "com.micronet.dsc.resetrb";
     private static final String EXTERNAL_BROADCAST_RESETRB = "com.micronet.dsc.resetRB.reset";
@@ -1066,8 +1073,8 @@ public class Power {
 
 
     ///////////////////////////////////////////////////////////
-    // kill(): Kill the service
-    //  called during shutdown
+    // killService(): Kill the service
+    //  kills off the process associated with the service
     ///////////////////////////////////////////////////////////
     public void killService() {
 
@@ -1084,10 +1091,29 @@ public class Power {
 
 
     ///////////////////////////////////////////////////////////
-    // restartAtsProcess(): Restart the service
-    //  restart can be useful to clear any problems in the app during troubleshooting
+    // startService()
+    //  sends an action to the service to start, along with a reason
+    //  this can be called from the BindingService to start the MainService
     ///////////////////////////////////////////////////////////
-    public void restartAtsProcess() {
+    static public void startService(Context context, String restart_reason) {
+
+        Intent intent = new Intent(context, MainService.class);
+
+        intent.putExtra(Power.ALARM_RESTART_NAME, 1);
+        intent.putExtra("reason", restart_reason);
+
+        context.startService(intent);
+    }
+
+
+    ///////////////////////////////////////////////////////////
+    // restartAtsProcess(): Restart the service
+    //  restart can be useful to clear any problems in the app
+    //  this will kill the process and set an alarm to restart the service in 2 seconds
+    //  called by watchdogs
+    //  restart_reason: a Reason (one of the RESTART_REASON_ constants)
+    ///////////////////////////////////////////////////////////
+    public void restartAtsProcess(String restart_reason) {
 
         Log.i(TAG, "Restarting ATS Service (expect 2s delay)");
 
@@ -1099,6 +1125,7 @@ public class Power {
 
         Intent i = new Intent(service.context, AlarmReceiver.class); // it goes to this guy
         i.setAction(ALARM_RESTART_NAME);
+        i.putExtra("reason", restart_reason);
 
 
         service.shutdownService(true); // save crash data too

@@ -46,12 +46,12 @@ public class AlarmReceiver extends WakefulBroadcastReceiver {
 
             Log.d(TAG, "Restart Service Alarm");
 
-            String source = intent.getStringExtra("source");
+            String reason = intent.getStringExtra("reason");
 
             // Send intent to service (and start if needed)
             Intent i = new Intent(context, MainService.class);
             i.putExtra(Power.ALARM_RESTART_NAME, 1);
-            i.putExtra("source", source);
+            i.putExtra("reason", reason);
             startWakefulService(context, i); // wakeful to make sure we don't power down before
         }
 

@@ -36,6 +36,14 @@ public class Codec {
     public static final int SHUTDOWN_REASON_SYS_SHUTDOWN = 3; // system is being shut down by the system (outside ATS)
 
 
+    // Define various Restart Reasons that can be sent by this application to the server
+    public static final int RESTART_REASON_UNKNOWN = 0; // restarted by a watchdog
+    public static final int RESTART_REASON_WATCHDOG = 1; // restarted by a watchdog
+    public static final int RESTART_REASON_OTA_REQUEST = 2; // restarted by a request over OTA/UDP
+    public static final int RESTART_REASON_LOCAL_REQUEST = 3; // restarted by a local app via bind or broadcast
+
+
+
 	// Define various NAKs that can be sent by this application to the server
     public static final int NAK_UNKNOWN_COMMAND = 1;
     public static final int NAK_MISSING_REQUIRED_DATA= 2;
@@ -667,9 +675,9 @@ public class Codec {
     // dataForServiceRestart()
     // returns 2 bytes of data for inclusion in System Boot message
     ///////////////////////////////////////////////////
-    public static byte[] dataForServiceRestart() {
+    public static byte[] dataForServiceRestart(String restart_reason) {
 
-        byte[] data = new byte[2];
+        byte[] data = new byte[3];
 
         // [0..1] = ATS version code
 
@@ -677,6 +685,23 @@ public class Codec {
         data[0] = (byte) (i & 0xFF);
         i >>=8;
         data[1] = (byte) (i & 0xFF);
+
+        data[2] = RESTART_REASON_UNKNOWN; // unknown reason
+
+        if ((restart_reason != null) && (!restart_reason.isEmpty())) {
+
+            if (restart_reason.equals(Power.RESTART_REASON_WATCHDOG))
+                data[2] = RESTART_REASON_WATCHDOG;
+            else if (restart_reason.equals(Power.RESTART_REASON_LOCAL_REQUEST))
+                data[2] = RESTART_REASON_LOCAL_REQUEST;
+            else if (restart_reason.equals(Power.RESTART_REASON_OTA_REQUEST))
+                data[2] = RESTART_REASON_OTA_REQUEST;
+
+
+        }
+
+
+
 
         return data;
     }

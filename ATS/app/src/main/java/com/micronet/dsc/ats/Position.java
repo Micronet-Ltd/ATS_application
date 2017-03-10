@@ -611,6 +611,7 @@ public class Position {
                    (debounceIdling >= threshold_seconds)) { // past threshold
                     Log.i(TAG, "Idling On");
                     flagIdling = true; // we should be idling.
+                    continuous_idling_s = debounceIdling; // so it is set to correct value before triggering event
                     service.addEvent(EventType.EVENT_TYPE_IDLING_ON);
                 }
             }
