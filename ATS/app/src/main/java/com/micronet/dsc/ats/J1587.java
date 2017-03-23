@@ -33,6 +33,8 @@ public class J1587 extends EngineBus {
 
 
 
+    private static final int DTC_FAKE_SOURCE_ADDRESS = 0xFF; // use this fake source address for reporting the source address of a DTC
+
     //ScheduledThreadPoolExecutor exec;
 
 //    J1708 j1708;
@@ -70,10 +72,11 @@ public class J1587 extends EngineBus {
 
 
     static final int PID_REQUEST = 0;   // PID used when making a request for info
-    static final int PID_VIN = 237;
-    static final int PID_ODOMETER = 245;
-    static final int PID_FUEL_CONSUMPTION = 250;
-    static final int PID_DIAGNOSTICS = 194;
+    static final int PID_LAMPS = 44; // received every 1 second
+    static final int PID_VIN = 237; // received on request
+    static final int PID_ODOMETER = 245; // received every 10 seconds
+    static final int PID_FUEL_CONSUMPTION = 250; // received on request
+    static final int PID_DIAGNOSTICS = 194; // received when state transitions and sometimes up to every 1 s
 
     static final int PID_CONNECTION_MANAGEMENT = 197; // for transport protocol
     static final int PID_CONNECTION_DATA = 198;
@@ -89,6 +92,7 @@ public class J1587 extends EngineBus {
     public void logStatus() {
         Log.d(TAG,  engine.getBusName(myBusType) + "= " + (isCommunicating() ? "UP" : "--") + " Addr " + ADDRESS_MID + " : " +
             " DTCs " + numCollectedDtcs +
+            " Lamps " + lampStatus +
             " Odom " +  (odometer_m  == -1 ? '?' : odometer_m + "m") +
             " FuelC " + (fuel_mL == -1 ? '?' : fuel_mL + "mL") +
             " VIN " + vin
@@ -328,6 +332,14 @@ public class J1587 extends EngineBus {
     } // requestPid
 
 
+    ////////////////////////////////////////////////
+    // parsePid()
+    //  mid : the J1587 message ID
+    //  pid: the J1587 pid
+    //  data: points at the raw received packet
+    //  start_index: what index in data to start processing the data associated this PID
+    //  length : the length of the data associated with this PID
+    ////////////////////////////////////////////////
     void parsePid(int mid, int pid, byte[] data, int start_index, int length) {
 
         // all integers are little endian, all strings are big endian
@@ -340,6 +352,16 @@ public class J1587 extends EngineBus {
         long lval;
         switch(pid) {
 
+            case PID_LAMPS:
+                Log.v(TAG, "Parsing Lamp Status From " + mid + " PID " + pid);
+                if (length != 1) {
+                    Log.e(TAG, "Expected Lamp Status value to be 1 byte long");
+                    return;
+                }
+                lval = parseLampStatus(mid, data, start_index);
+
+                addLamps((int) lval);
+                break;
             case PID_VIN:
                 Log.v(TAG, "Parsing VIN From " + mid + " PID " + pid);
                 String newVin = new String(data, start_index, length);
@@ -443,6 +465,28 @@ public class J1587 extends EngineBus {
 
 
     ////////////////////////////////////////////////////////////////
+    //  parseLampStatus
+    //      parses out the lamp status
+    //  returns:
+    //      0 if no lamps are on
+    //      otherwise, bitfield of which lamps are known to be on
+    ////////////////////////////////////////////////////////////////
+    int parseLampStatus(int mid, byte[] data, int startpos) {
+
+        if (data.length < startpos+1) return 0; // safety: invalid (not enough data)
+
+        int lamps = 0;
+        // Note: these bits are re-ordered so that they are similar to the J1939 ordering
+        if ((data[startpos] & 0x03) == 0x01) lamps |= 4;    // Red
+        if ((data[startpos] & 0x0C) == 0x04) lamps |= 2;    // Amber
+        if ((data[startpos] & 0x30) == 0x10) lamps |= 1;    // Protect
+        if ((data[startpos] & 0xC0) == 0x40) lamps |= 8;    // Reserved
+
+        return lamps;
+    } // parseLampStatus()
+
+
+        ////////////////////////////////////////////////////////////////
     //  parseTroubleCode
     //      parses out a trouble code
     //  returns:
@@ -493,7 +537,7 @@ public class J1587 extends EngineBus {
         res |= (data[startpos] & 0xFF); // PID
 
         dtc.dtc_value = res;
-
+        dtc.source_address = DTC_FAKE_SOURCE_ADDRESS; // always use a source address of 0, since we already return MID as part of code.
 
         return dtc;
 

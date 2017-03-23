@@ -14,8 +14,9 @@ public class CodecTest extends AndroidTestCase {
 
     // Set these two values to be equal to the ATS build version for protocol testing
     // ATS 2.3.0 = 230
-    static final byte ATS_VERSION_LSB = (byte) 230;
-    static final byte ATS_VERSION_MSB = (byte) 0;
+
+    static final int ATS_TEST_VERSION = 260; // test that version information returned in udp packets matches this
+
 
     public void setUp(){
         RenamingDelegatingContext context
@@ -160,7 +161,7 @@ public class CodecTest extends AndroidTestCase {
         byte[] expectedRebootData = {
             0x03, 0x00,
             0x07,  // io_boot_reason
-            ATS_VERSION_LSB, ATS_VERSION_MSB
+            (ATS_TEST_VERSION & 0xFF), ((ATS_TEST_VERSION >> 8) & 0xFF)
         };
 
         byte[] expectedData = expectedRebootData;
@@ -182,7 +183,7 @@ public class CodecTest extends AndroidTestCase {
 
         byte[] expectedRestartData = {
                 0x03, 0x00,
-                ATS_VERSION_LSB, ATS_VERSION_MSB, // current build version, set these appropriately
+                (ATS_TEST_VERSION & 0xFF), ((ATS_TEST_VERSION >> 8) & 0xFF),
                 0 // unknown reason
         };
 
@@ -280,7 +281,7 @@ public class CodecTest extends AndroidTestCase {
     public void test_dataForSystemBoot() {
 
 
-        int build_code = 152;
+        //int build_code = 260;
         //build_code = BuildConfig.VERSION_CODE;
 
         // 152 = x0098
@@ -292,7 +293,7 @@ public class CodecTest extends AndroidTestCase {
 
         // ATS Version = 2.3.0 = 230
         //  you must set these last two bytes to be the correct version
-        byte[] expected = {7, ATS_VERSION_LSB, ATS_VERSION_MSB};
+        byte[] expected = {7, (ATS_TEST_VERSION & 0xFF), ((ATS_TEST_VERSION >> 8) & 0xFF)};
 
         assertEquals(expected.length, data.length);
         assertEquals(Arrays.toString(expected), Arrays.toString(data));

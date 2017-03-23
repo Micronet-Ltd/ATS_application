@@ -52,7 +52,8 @@ public class State {
     public static final int FUEL_ECONOMY = 33;   // from engine diagnostics
     public static final int FLAG_REVERSE_GEAR_STATUS = 34;
     public static final int FLAG_PARKING_BRAKE_STATUS = 35;
-    public static final int ARRAY_FAULT_CODES = 36;
+    public static final int ARRAY_FAULT_CODES_5BYTES_ATS2P5 = 36; // Versions up to ATS 2.5 stored this as an array with 5 byte entries
+    public static final int ARRAY_FAULT_CODES = 37;
 
 
     // Internal variables
@@ -100,6 +101,28 @@ public class State {
         SharedPreferences.Editor editor = sharedPref.edit();
         editor.clear().commit();
     }
+
+
+
+    ///////////////////////////////////////////////////
+    // removeState()
+    //   erases a value for the state setting
+    //  returns : true if it was written, false if it was not
+    ///////////////////////////////////////////////////
+    public boolean removeState(final int state_id) {
+
+        try {
+            SharedPreferences.Editor editor = sharedPref.edit();
+
+            editor.remove(Integer.toString(state_id));
+            editor.commit();
+
+        } catch (Exception e) {
+            Log.e(TAG, "Exception: removeState() " + e.toString(), e );
+        }
+        return true; // OK
+    }
+
 
 
     ///////////////////////////////////////////////////

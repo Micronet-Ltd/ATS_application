@@ -7,6 +7,8 @@ import android.test.AndroidTestCase;
  */
 public class EngineBusTest extends AndroidTestCase{
 
+    // Most of the functions in EngineBus class are tested in the EngineBus sub-classes (J1587Test and J1939Test)
+
     public void test_littleEndian2Long() {
 
 

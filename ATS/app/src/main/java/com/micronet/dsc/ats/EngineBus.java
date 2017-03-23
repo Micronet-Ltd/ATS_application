@@ -151,19 +151,26 @@ public class EngineBus {
     ///////////////////////////////////////////////////////////////////
 
     public static class Dtc {
+        int source_address; // we will track DTCs separately for each source address
         long dtc_value;
         int occurence_count;
         int bytes_parsed; // the length of the DTC in the message (may be either 2 or 3 bytes)
     } // Dtc
 
 
+    int collectedLampsBf = 0; // this is a bitfield of which lamps are on
     List<Dtc> collectedDtcs = new ArrayList<Dtc>();
     boolean dtcIsCollecting = false;
+
+
+    // These are set after collection is complete
+    int lampStatus;
     int numCollectedDtcs = 0;
 
     ////////////////////////////////////////////////////////////////
     // startCollectingDtcs()
     //      start the timer that will process all the DTCs received when the collection window expires
+    //      also collects lamp status
     ////////////////////////////////////////////////////////////////
     void startCollectingDtcs() {
 
@@ -199,6 +206,8 @@ public class EngineBus {
         // empty our list so we can start adding what is reported
         collectedDtcs.clear();
 
+        collectedLampsBf = 0;
+
         // as a safety, we should track that we've received at least one DTC message.
         // we should receive a DTC message even if there are no Current DTCs
         dtcIsCollecting = false;
@@ -215,7 +224,8 @@ public class EngineBus {
         // check that we have not already been collected. if we have, then just update
         boolean found = false;
         for (Dtc cdtc : collectedDtcs) {
-            if (cdtc.dtc_value == dtc.dtc_value) {
+            if ((cdtc.dtc_value == dtc.dtc_value) &&
+                    (cdtc.source_address == dtc.source_address)) {
                 found = true;
                 cdtc.occurence_count = dtc.occurence_count;
                 break;
@@ -227,9 +237,26 @@ public class EngineBus {
     } // addDtc
 
 
+    ////////////////////////////////////////////////////////////////
+    // addLamps()
+    //  adds lamps. Lamp statuses are a bit-field, up to one byte total
+    //      this is ORd against existing value to determine the accumulated lamp status
+    ////////////////////////////////////////////////////////////////
+    void addLamps(int new_lamp_status) {
+
+        collectedLampsBf |= new_lamp_status;
+    }
 
 
 
+    /////////////////////////////////////////////////////
+    // checkLamps()
+    //  Inform the engine module that the Lamps list is ready for processing and checking for changes
+    int checkLamps(int newLamps) {
+        lampStatus = collectedLampsBf;
+        engine.checkLamps(myBusType, lampStatus);
+        return lampStatus;
+    } // checkLamps()
 
     /////////////////////////////////////////////////////
     // checkDtcs()
@@ -240,10 +267,12 @@ public class EngineBus {
     int checkDtcs(List<Dtc> newDtcs) {
 
         long[] longDtcs = new long[newDtcs.size()];
+        int[] sourceAddresses = new int[newDtcs.size()];
 
         int i = 0;
         for (Dtc dtc : newDtcs) {
             longDtcs[i] = dtc.dtc_value;
+            sourceAddresses[i] = dtc.source_address;
             i++;
         }
 
@@ -252,7 +281,8 @@ public class EngineBus {
         // Even though it doesn't matter to server
         //  whether this comes from 250kb or 500kb bus, we want to keep the constants values consistent.
         numCollectedDtcs = newDtcs.size();
-        return engine.checkDtcs(myBusType, longDtcs);
+
+        return engine.checkDtcs(myBusType, longDtcs, sourceAddresses, lampStatus);
 
     } // checkDtcs()
 
@@ -260,16 +290,17 @@ public class EngineBus {
 
 
     ////////////////////////////////////////////////////////////////
-    // processCollectedDTCs()
+    // processCollectedDTCsAndLamps()
     //  sends our complete DTC list to the Engine module, and then clears our list to start collecting again
     //  make sure enough time has passed between calls to be sure we captured all of the DTCs that are reporting on the bus
     ////////////////////////////////////////////////////////////////
-    void processCollectedDTCs() {
+    void processCollectedDTCsAndLamps() {
 
 
         // we received at least one DTC message
-        Log.v(TAG, "" + collectedDtcs.size() + " active DTCs");
+        Log.v(TAG, "" + collectedDtcs.size() + " active DTCs, Lamps = " + collectedLampsBf);
 
+        checkLamps(collectedLampsBf);
         checkDtcs(collectedDtcs);
 
         clearCollectedDtcs();
@@ -287,7 +318,7 @@ public class EngineBus {
         public void run() {
             try {
                 Log.vv(TAG, "collectDTCsTask()");
-                processCollectedDTCs();
+                processCollectedDTCsAndLamps();
                 Log.vv(TAG, "collectDTCsTask() END");
             } catch(Exception e) {
                 Log.e(TAG + ".collectDTCsTask", "Exception: " + e.toString(), e);

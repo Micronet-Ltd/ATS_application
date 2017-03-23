@@ -121,20 +121,25 @@ public class EngineTest extends AndroidTestCase {
         long[] dtclist0 = new long[] {};
 
 
+        int[] dtcsource2 = new int[] { 0, 0x17};
+        int[] dtcsource1 = new int[] { 0 };
+        int[] dtcsource0 = new int[] {};
+
         byte[] state_code_array; // expected state info
         byte[] message_code_array; // expected for messages
         byte[] message_code_array1; // expected for messages
         byte[] message_code_array2; // expected for messages
 
+        int lamp_status_bf = 0x55;
 
         // checkDTCs responds with 0xAADD (AA = num added, DD = num deleted)
 
         // add a DTCs
-        assertEquals(0x0100, engine.checkDtcs(Engine.BUS_TYPE_J1587, dtclist1));
+        assertEquals(0x0100, engine.checkDtcs(Engine.BUS_TYPE_J1587, dtclist1, dtcsource1, lamp_status_bf));
 
         // check for messages and state changes
-        state_code_array = new byte[] { Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12};
-        message_code_array = state_code_array;
+        state_code_array = new byte[] { Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12, 0x00};
+        message_code_array = new byte[] { Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12, 0x00, 0x55, 0x00};
 
         assertEquals(state_code_array , service.state.readStateArray(State.ARRAY_FAULT_CODES));
         assertEquals(EventType.EVENT_TYPE_FAULTCODE_ON, service.queue.getFirstItem(Queue.SERVER_ID_PRIMARY).event_type_id);
@@ -143,13 +148,13 @@ public class EngineTest extends AndroidTestCase {
 
         // add another DTC
         service.queue.clearAll();
-        assertEquals(0x0100, engine.checkDtcs(Engine.BUS_TYPE_J1587, dtclist2));
+        assertEquals(0x0100, engine.checkDtcs(Engine.BUS_TYPE_J1587, dtclist2, dtcsource2, lamp_status_bf));
 
 
         // check for messages and state changes
-        state_code_array = new byte[] { Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12,
-                Engine.BUS_TYPE_J1587, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB};
-        message_code_array = new byte[] {Engine.BUS_TYPE_J1587, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB};
+        state_code_array = new byte[] { Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12, 0x00,
+                Engine.BUS_TYPE_J1587, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB, 0x17};
+        message_code_array = new byte[] {Engine.BUS_TYPE_J1587, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB, 0x00, 0x55, 0x00};
 
 
         assertEquals(state_code_array , service.state.readStateArray(State.ARRAY_FAULT_CODES));
@@ -160,18 +165,18 @@ public class EngineTest extends AndroidTestCase {
 
         // add two DTCs from a different bus (these should be kept separate from the other bus DTCs)
         service.queue.clearAll();
-        assertEquals(0x0200, engine.checkDtcs(Engine.BUS_TYPE_J1939, dtclist2));
+        assertEquals(0x0200, engine.checkDtcs(Engine.BUS_TYPE_J1939, dtclist2, dtcsource2, lamp_status_bf));
 
         // check for messages and state changes
-        state_code_array = new byte[] { Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12,
-                Engine.BUS_TYPE_J1587, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB,
-                Engine.BUS_TYPE_J1939, 0x78, 0x56, 0x34, 0x12,
-                Engine.BUS_TYPE_J1939, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB
+        state_code_array = new byte[] { Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12, 0x00,
+                Engine.BUS_TYPE_J1587, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB, 0x17,
+                Engine.BUS_TYPE_J1939, 0x78, 0x56, 0x34, 0x12, 0x00,
+                Engine.BUS_TYPE_J1939, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB, 0x17
         };
         message_code_array1 = new byte[] {
-                Engine.BUS_TYPE_J1939, 0x78, 0x56, 0x34, 0x12 };
+                Engine.BUS_TYPE_J1939, 0x78, 0x56, 0x34, 0x12, 0x00 ,0x55, 0x00 };
         message_code_array2 = new byte[] {
-                Engine.BUS_TYPE_J1939, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB
+                Engine.BUS_TYPE_J1939, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB, 0x17, 0x55, 0x00
         };
 
         assertEquals(state_code_array , service.state.readStateArray(State.ARRAY_FAULT_CODES));
@@ -188,16 +193,16 @@ public class EngineTest extends AndroidTestCase {
         // now remove one dtc
 
         service.queue.clearAll();
-        assertEquals(0x0200, engine.checkDtcs(Engine.BUS_TYPE_J1939, dtclist1));
+        assertEquals(0x0200, engine.checkDtcs(Engine.BUS_TYPE_J1939, dtclist1, dtcsource1, lamp_status_bf));
 
         // check for messages and state changes
-        state_code_array = new byte[] { Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12,
-                Engine.BUS_TYPE_J1587, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB,
-                Engine.BUS_TYPE_J1939, 0x78, 0x56, 0x34, 0x12,
+        state_code_array = new byte[] { Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12, 0x00,
+                Engine.BUS_TYPE_J1587, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB, 0x17,
+                Engine.BUS_TYPE_J1939, 0x78, 0x56, 0x34, 0x12, 0x00,
 
         };
         message_code_array1 = new byte[]{
-                Engine.BUS_TYPE_J1939, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB
+                Engine.BUS_TYPE_J1939, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB, 0x17, 0x55, 0x00
         };
 
         assertEquals(state_code_array , service.state.readStateArray(State.ARRAY_FAULT_CODES));
@@ -209,18 +214,18 @@ public class EngineTest extends AndroidTestCase {
 
 
         service.queue.clearAll();
-        assertEquals(0x0200, engine.checkDtcs(Engine.BUS_TYPE_J1587, dtclist0));
+        assertEquals(0x0200, engine.checkDtcs(Engine.BUS_TYPE_J1587, dtclist0, dtcsource0, lamp_status_bf));
 
         // check for messages and state changes
         state_code_array = new byte[] {
-                Engine.BUS_TYPE_J1939, 0x78, 0x56, 0x34, 0x12,
-                Engine.BUS_TYPE_J1939, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB
+                Engine.BUS_TYPE_J1939, 0x78, 0x56, 0x34, 0x12, 0x00,
+                Engine.BUS_TYPE_J1939, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB, 0x17,
         };
         message_code_array1 = new byte[]{
-                Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12
+                Engine.BUS_TYPE_J1587, 0x78, 0x56, 0x34, 0x12, 0x00, 0x55, 0x00,
         };
         message_code_array2 = new byte[] {
-                Engine.BUS_TYPE_J1587, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB
+                Engine.BUS_TYPE_J1587, 0x01, (byte) 0xEF, (byte) 0xCD, (byte) 0xAB, 0x17, 0x55, 0x00
         };
 
         assertEquals(state_code_array , service.state.readStateArray(State.ARRAY_FAULT_CODES));

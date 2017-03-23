@@ -193,6 +193,7 @@ public class LocalMessage {
         ibroadcast.putExtra("actualOdometerMeters", engineStatus.odometer_m);
         ibroadcast.putExtra("fuelConsumptionMilliliters", engineStatus.fuel_mL);
         ibroadcast.putExtra("fuelEconomyMetersPerLiter", engineStatus.fuel_mperL);
+        ibroadcast.putExtra("lampsBitfield",engineStatus.lamps_bf);
 
         // Add DTCs
 
@@ -200,9 +201,10 @@ public class LocalMessage {
 
         int dtc_index = 0;
         for (Engine.EngineDtc dtc : service.engine.current_dtcs) {
-            long[] dtc_array = new long[] {0,0};
+            long[] dtc_array = new long[] {0,0,0};
             dtc_array[0] = dtc.bus_type;
             dtc_array[1] = dtc.dtc_value;
+            dtc_array[2] = dtc.source_address;
             ibroadcast.putExtra("dtc" + dtc_index , dtc_array);
             dtc_index++;
         } // for each DTC

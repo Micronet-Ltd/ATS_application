@@ -72,6 +72,7 @@ public class Engine {
         long odometer_m;
         long fuel_mL;
         long fuel_mperL;
+        int lamps_bf = 0; // bitfield containing lamp status
     };
 
     Status status = new Status();
@@ -82,30 +83,40 @@ public class Engine {
     int bus_type_odometer_m = BUS_TYPE_NONE ; // which bus did this come from ?
     int bus_type_fuel_mL = BUS_TYPE_NONE ; // which bus did this come from ?
     int bus_type_fuel_mperL = BUS_TYPE_NONE ; // which bus did this come from ?
+    int bus_type_lamps_bf = BUS_TYPE_NONE ; // which bus did this come from ?
 
 
-    public int ENGINE_DTC_REMOVAL_COUNT = 3; // how many times must a code not appear on bus before it is considered gone
+    public static final int ENGINE_DTC_REMOVAL_COUNT = 3; // how many times must a code not appear on bus before it is considered gone
                                              // this is needed to hedge against us losing communication
+
+    static final int DTC_SOURCE_ADDRESS_UNKNOWN = 0xFF; // value indicating we don't know the source address of a DTC
+
     public static class EngineDtc {
+
         long dtc_value; // The value that is sent to the server, meaning can depend on bus type and vehicle
         int bus_type = BUS_TYPE_NONE;
+        int source_address = DTC_SOURCE_ADDRESS_UNKNOWN ; // address that reported this DTC
         int removal_count = 0; // if a code does not appear on the bus, this count is incremented until it is removed
 
         // For conversion between the structure and an array of bytes
-        //  each item is 5 bytes (one byte for the bus and then the 4 byte DTC)
-        static int DTC_ARRAY_ENTRY_SIZE = 5;
+        //  each item is 6 bytes (one byte for the bus and then the 4 byte DTC and 1 byte for the source address)
+        static final int DTC_ARRAY_ENTRY_SIZE = 6;
+
         static void convertToBytes(EngineDtc dtc, byte[] output, int start_index) {
             output[0 + start_index] = (byte) dtc.bus_type;
             output[1 + start_index] = (byte) (dtc.dtc_value & 0xFF);
             output[2 + start_index] = (byte) ((dtc.dtc_value >> 8) & 0xFF);
             output[3 + start_index] = (byte) ((dtc.dtc_value >> 16) & 0xFF);
             output[4 + start_index] = (byte) ((dtc.dtc_value >> 24) & 0xFF);
+            output[5 + start_index] = (byte) (dtc.source_address & 0xFF);
 
         } // convertToBytes
 
         static EngineDtc convertFromBytes(byte[] input, int start_index) {
             EngineDtc dtc = new EngineDtc();
             dtc.bus_type = (input[start_index] & 0xFF);
+            dtc.source_address = (input[start_index + 5] & 0xFF);
+
             dtc.dtc_value = (input[start_index + 4] & 0xFF);
             dtc.dtc_value <<= 8;
             dtc.dtc_value |= (input[start_index+3] & 0xFF);
@@ -115,6 +126,29 @@ public class Engine {
             dtc.dtc_value |= (input[start_index+1] & 0xFF);
             return dtc;
         } // convertFromBytes
+
+
+        // In ATS 2p5 and earlier, each item was only 5 bytes and did not contain a source address
+        static final int DTC_ARRAY_ENTRY_SIZE_5BYTES_ATS2P5 = 5;
+
+        // convertFromBytes_5BYTES_ATS2P5()
+        //  convert from the ATS 2.5 5-byte format
+        static EngineDtc convertFromBytes_5BYTES_ATS2P5(byte[] input, int start_index) {
+            EngineDtc dtc = new EngineDtc();
+            dtc.bus_type = (input[start_index] & 0xFF);
+            dtc.source_address = DTC_SOURCE_ADDRESS_UNKNOWN;
+
+            dtc.dtc_value = (input[start_index + 4] & 0xFF);
+            dtc.dtc_value <<= 8;
+            dtc.dtc_value |= (input[start_index+3] & 0xFF);
+            dtc.dtc_value <<= 8;
+            dtc.dtc_value |= (input[start_index+2] & 0xFF);
+            dtc.dtc_value <<= 8;
+            dtc.dtc_value |= (input[start_index+1] & 0xFF);
+            return dtc;
+        } // convertFromBytes
+
+
 
     } // EngineDtc
 
@@ -144,22 +178,10 @@ public class Engine {
 
         warmStart = service.state.readStateBool(State.ENGINE_WARM_START);
 
-        // Load the current DTCs
+        // clear and re-load the current DTCs
         current_dtcs.clear();
+        loadDtcsFromStateFile();
 
-        byte[] dtc_array;
-        dtc_array = service.state.readStateArray(State.ARRAY_FAULT_CODES);
-        // dtc array is 5 bytes for each dtc: 1 byte bus followed by 4 byte dtc_value
-
-        if (dtc_array != null) {
-            int num_dtcs = dtc_array.length / EngineDtc.DTC_ARRAY_ENTRY_SIZE;
-            EngineDtc dtc;
-            for (int i = 0; i < num_dtcs; i++) {
-                dtc = EngineDtc.convertFromBytes(dtc_array, i * EngineDtc.DTC_ARRAY_ENTRY_SIZE);
-                //Log.d(TAG, "retrieved from state: DTC " + getBusName(dtc.bus_type) + " " + String.format("%08X", dtc.dtc_value));
-                current_dtcs.add(dtc);
-            }
-        }
 
         // set initial values for isEnabled, which determines whether local broadcasts get sent for vehicle status
         boolean j1939_enabled = getConfigJ1939Enabled();
@@ -174,6 +196,80 @@ public class Engine {
 
 
     } // Engine()
+
+
+
+    void saveDtcsToStateFile() {
+        int num_dtcs = current_dtcs.size();
+
+        byte[] dtc_array= new byte[num_dtcs * EngineDtc.DTC_ARRAY_ENTRY_SIZE];
+
+        int i = 0;
+        for (EngineDtc current_dtc : current_dtcs) {
+            if (i < num_dtcs) {
+                EngineDtc.convertToBytes(current_dtc, dtc_array, i*EngineDtc.DTC_ARRAY_ENTRY_SIZE);
+            }
+            i++;
+        } // each dtc
+
+        //Log.d(TAG, "adding State DTC " + Log.bytesToHex(dtc_array, dtc_array.length));
+        service.state.writeStateArray(State.ARRAY_FAULT_CODES, dtc_array); // remember this
+
+    }
+
+    ////////////////////////////////////////////////////////////////////
+    // loadDtcsFromStateFile()
+    //  loads the DTCs that were saved to the state file and populate our in-memory array of current DTCs
+    ////////////////////////////////////////////////////////////////////
+    void loadDtcsFromStateFile() {
+
+        byte[] dtc_array;
+        dtc_array = service.state.readStateArray(State.ARRAY_FAULT_CODES);
+
+
+
+        if (dtc_array == null) {
+            // check for older version compatibility
+            // versions <= ATS v2.5 stored this data in a 5 byte array, without source addresses, under a different state ID
+
+            dtc_array = service.state.readStateArray(State.ARRAY_FAULT_CODES_5BYTES_ATS2P5);
+
+            if (dtc_array == null) return; // nothing to populate
+
+            // dtc array is 5 bytes for each dtc: 1 byte bus followed by 4 byte dtc_value.
+            //  source address is always unknown
+
+            int num_dtcs = dtc_array.length / EngineDtc.DTC_ARRAY_ENTRY_SIZE_5BYTES_ATS2P5;
+            EngineDtc dtc;
+            for (int i = 0; i < num_dtcs; i++) {
+                dtc = EngineDtc.convertFromBytes_5BYTES_ATS2P5(dtc_array, i * EngineDtc.DTC_ARRAY_ENTRY_SIZE_5BYTES_ATS2P5);
+                Log.d(TAG, "older, 5-byte DTC loaded: DTC " + getBusName(dtc.bus_type) + " " + String.format("%08X", dtc.dtc_value));
+                current_dtcs.add(dtc);
+            }
+
+
+            // we now need to re-save the state information as 6 bytes and delete the old 5 byte version
+
+            saveDtcsToStateFile(); // save back in the 6-byte format
+
+            service.state.removeState(State.ARRAY_FAULT_CODES_5BYTES_ATS2P5);
+
+            return;
+        } // check for older version compatibility
+
+
+
+        // dtc array is 6 bytes for each dtc: 1 byte bus followed by 4 byte dtc_value followed by 1 byte source address
+
+        int num_dtcs = dtc_array.length / EngineDtc.DTC_ARRAY_ENTRY_SIZE;
+        EngineDtc dtc;
+        for (int i = 0; i < num_dtcs; i++) {
+            dtc = EngineDtc.convertFromBytes(dtc_array, i * EngineDtc.DTC_ARRAY_ENTRY_SIZE);
+            //Log.d(TAG, "retrieved from state: DTC " + getBusName(dtc.bus_type) + " " + String.format("%08X", dtc.dtc_value));
+            current_dtcs.add(dtc);
+        }
+
+    } // loadDtcsFromStateFile()
 
 
     ////////////////////////////////////////////////////////////////////
@@ -708,6 +804,22 @@ public class Engine {
 
 
 
+    public long checkLamps(int bus_type, int new_lamps_bf) {
+
+        if (!hasBusPriority(bus_type, bus_type_lamps_bf)) return status.lamps_bf;
+        bus_type_lamps_bf = bus_type;
+
+        if (new_lamps_bf == status.lamps_bf) return status.lamps_bf;
+
+        status.lamps_bf = new_lamps_bf;
+        Log.vv(TAG, "lamp status changed to " + status.lamps_bf+ " m/L");
+
+        return status.lamps_bf;
+    } // checkFuelEconomy()
+
+
+
+
     public String checkVin(int bus_type, String newVin) {
 
 
@@ -744,7 +856,7 @@ public class Engine {
     // Returns:
     //  0xAADD where AA = num added, DD = num_deleted
     /////////////////////////////////////////////////////
-    public int checkDtcs(int bus_type, long[] newDtcs) {
+    public int checkDtcs(int bus_type, long[] newDtcs, int[] newSourceAddresses, int newLampStatus) {
 
         // compare everything in tempDtcs to the real list of DTCs
         // indicate this came from the J1939 bus
@@ -752,7 +864,7 @@ public class Engine {
 
         int num_added=0, num_deleted = 0;
         boolean found;
-
+        int i = 0;
 
         // Check for deletions (items in current list that are not in new list)
         Iterator<EngineDtc> current_iter = current_dtcs.iterator();
@@ -762,11 +874,22 @@ public class Engine {
             if (current_dtc.bus_type == bus_type) { // only check codes that are for the same bus type
                 // we will only consider removing codes that are for the same bus type
                 found = false;
+                i = 0;
                 for (long dtc_value : newDtcs) {
                     if (dtc_value == current_dtc.dtc_value) {
-                        found = true;
-                        break;
+
+                        // set unknown source addresses (older ATS versions did not record the source address)
+                        if (current_dtc.source_address == DTC_SOURCE_ADDRESS_UNKNOWN) {
+                            current_dtc.source_address = newSourceAddresses[i];
+                            Log.d(TAG, "updating " + getBusName(bus_type) + " DTC " + String.format("x%08X", current_dtc.dtc_value) + " source addr to " + String.format("x%02X", current_dtc.source_address));
+                        }
+
+                        if (current_dtc.source_address == newSourceAddresses[i]) { // current address is the same as new address
+                            found = true; // this current DTC still exists in the new list
+                            break;
+                        }
                     }
+                    i += 1;
                 }
 
                 if (!found) {
@@ -774,16 +897,21 @@ public class Engine {
                     current_dtc.removal_count++;
                     if (current_dtc.removal_count >= ENGINE_DTC_REMOVAL_COUNT) {
                         // removal count is high enough ... remove this code
-                        Log.d(TAG, "removing " + getBusName(bus_type) + " DTC " + String.format("x%08X", current_dtc.dtc_value) + " from current DTCs");
+                        Log.d(TAG, "removing " + getBusName(bus_type) + " Addr " + String.format("x%02X", current_dtc.source_address) + " DTC " + String.format("x%08X", current_dtc.dtc_value) + " from current DTCs");
 
 
 
-                        byte data[] = new byte[5];
+                        byte data[] = new byte[7];
                         data[0] = (byte) current_dtc.bus_type;
                         data[1] = (byte) (current_dtc.dtc_value & 0xFF);
                         data[2] = (byte) ((current_dtc.dtc_value >> 8) & 0xFF);
                         data[3] = (byte) ((current_dtc.dtc_value >> 16) & 0xFF);
                         data[4] = (byte) ((current_dtc.dtc_value >> 24) & 0xFF);
+                        data[5] = (byte) current_dtc.source_address;
+                        // add lamp status at the end
+                        data[6] = (byte) (newLampStatus & 0xFF);
+
+
 
                         service.addEventWithData(EventType.EVENT_TYPE_FAULTCODE_OFF, data);
 
@@ -797,21 +925,23 @@ public class Engine {
         } // each current code
 
         // Check for additions (items in new list that are not in current list)
-        int i = 0;
+
         for (i =0 ; i < newDtcs.length; i++) {
 
             EngineDtc newDtc = new EngineDtc();
             newDtc.dtc_value = newDtcs[i];
+            newDtc.source_address = newSourceAddresses[i];
             newDtc.bus_type = bus_type;
             newDtc.removal_count = 0;
 
             found = false;
             for (EngineDtc currentDtc : current_dtcs) {
                 if ((currentDtc.dtc_value == newDtc.dtc_value) &&
-                    (currentDtc.bus_type == newDtc.bus_type)) {
+                    (currentDtc.bus_type == newDtc.bus_type) &&
+                    (currentDtc.source_address == newDtc.source_address)) {
 
-                    // item exists in current list, update it accordingly
-                    currentDtc.removal_count = 0; // we do not remove it
+                    // new DTC already exists in current list, update it accordingly
+                    currentDtc.removal_count = 0; // we should not remove it anytime soon
                     found = true;
                     break;
                 }
@@ -819,14 +949,18 @@ public class Engine {
 
             if (!found) {
                 // add this item to the list of DTCs!
-                Log.d(TAG, "adding " + getBusName(bus_type) + " DTC " + String.format("x%08X", newDtc.dtc_value) + " to current DTCs");
+                Log.d(TAG, "adding " + getBusName(bus_type) + " Addr " + String.format("x%02X", newDtc.source_address) + " DTC " + String.format("x%08X", newDtc.dtc_value) + " to current DTCs");
 
-                byte data[] = new byte[5];
+                byte data[] = new byte[7];
                 data[0] = (byte) newDtc.bus_type;
                 data[1] = (byte) (newDtc.dtc_value & 0xFF);
                 data[2] = (byte) ((newDtc.dtc_value >> 8) & 0xFF);
                 data[3] = (byte) ((newDtc.dtc_value >> 16) & 0xFF);
                 data[4] = (byte) ((newDtc.dtc_value >> 24) & 0xFF);
+                data[5] = (byte) newDtc.source_address;
+
+                // add current lamp status at the end
+                data[6] = (byte) (newLampStatus & 0xFF);
 
                 service.addEventWithData(EventType.EVENT_TYPE_FAULTCODE_ON, data);
 
@@ -839,22 +973,8 @@ public class Engine {
         if ((num_added > 0) || (num_deleted > 0)) {
             // a change was made ,,, record the new array of dtc values & bus_types
 
-            String hex = new String("");
+            saveDtcsToStateFile();
 
-            int num_dtcs = current_dtcs.size();
-
-            byte[] dtc_array= new byte[num_dtcs * EngineDtc.DTC_ARRAY_ENTRY_SIZE];
-
-            i = 0;
-            for (EngineDtc current_dtc : current_dtcs) {
-                if (i < num_dtcs) {
-                    EngineDtc.convertToBytes(current_dtc, dtc_array, i*EngineDtc.DTC_ARRAY_ENTRY_SIZE);
-                }
-                i++;
-            } // each dtc
-
-            //Log.d(TAG, "adding State DTC " + Log.bytesToHex(dtc_array, dtc_array.length));
-            service.state.writeStateArray(State.ARRAY_FAULT_CODES, dtc_array); // remember this
         }
 
         return ((num_added & 0xFF) << 8) | (num_deleted & 0xFF);
@@ -1158,6 +1278,7 @@ public class Engine {
                 ) +
                 " : " +
                 "DTCs " + current_dtcs.size() +
+                " Lamps " + (bus_type_lamps_bf != BUS_TYPE_NONE ? status.lamps_bf : "?") +
                 " Odom " + (bus_type_odometer_m != BUS_TYPE_NONE ? status.odometer_m + "m": "?") +
                 " FuelC " + (bus_type_fuel_mL != BUS_TYPE_NONE ?  status.fuel_mL + "mL": "?") +
                 " FuelE " + (bus_type_fuel_mperL != BUS_TYPE_NONE ? status.fuel_mperL + "m/L": "?") +

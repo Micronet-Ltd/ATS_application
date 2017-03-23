@@ -270,6 +270,7 @@ public class J1939 extends EngineBus {
     public void logStatus() {
         Log.d(TAG,  engine.getBusName(myBusType) + "= " + (isCommunicating() ? "UP" : "--") + " Addr " + myAddress + " : " +
                 " DTCs " + numCollectedDtcs +
+                " Lamps " + lampStatus +
                 " Odom " + (odometer_m == -1 ? "?" : (odometer_type  == ODOMETER_TYPE_LORES ? "(L) " : (odometer_type == ODOMETER_TYPE_HIRES ? "(H) " : "(?)")) + odometer_m + "m") +
                 " FuelC " + (fuel_mL == -1 ? "?" : fuel_mL + "mL") +
                 " FuelE " + (fuel_mperL == -1 ? "?" : fuel_mperL + "m/L") +
@@ -1589,8 +1590,9 @@ public class J1939 extends EngineBus {
     ////////////////////////////////////////////////////////////////
     // parsePGN()
     //  parses a received message for the PGN
+    //  source_address : is just for remembering who sent it for DTCs
     ////////////////////////////////////////////////////////////////
-    void parsePGN(int pgn, byte[] data, int data_length) {
+    void parsePGN(int source_address, int pgn, byte[] data, int data_length) {
 
 
         int i;
@@ -1614,6 +1616,12 @@ public class J1939 extends EngineBus {
 
                 Dtc dtc;
 
+                // remember any lamps that are on
+                if (data_length > 2) { // this should always be the case
+                    addLamps(parseLampStatus(data, 0));
+                }
+
+
                 for (i = 2; i < data_length; i +=4) {
 
                     if (i+4 > data_length) {
@@ -1623,6 +1631,7 @@ public class J1939 extends EngineBus {
                     }
 
                     dtc = parseTroubleCode(data, i);
+                    dtc.source_address = source_address; // remember who send this DTC
                     if (dtc != null) {
                         addDtc(dtc); // add the DTC to a temp list
                     } else {
@@ -1744,15 +1753,44 @@ public class J1939 extends EngineBus {
 
         // check if we need to forward "raw" data to somewhere else
         //engine.checkRawForwarding(Engine.BUS_TYPE_J1939, connections[connectionID].pgn, connections[connectionID].source_address, connections[connectionID].data);
-        parsePGN(connections[connectionID].pgn, connections[connectionID].data, connections[connectionID].expected_bytes);
+        parsePGN(connections[connectionID].source_address, connections[connectionID].pgn, connections[connectionID].data, connections[connectionID].expected_bytes);
 
     } // processConnectionData
 
 
+    ////////////////////////////////////////////////////////////////
+    //  parseLampStatus
+    //      parses out the lamp status and returns a bitfield if any are marked on
+    //  returns:
+    //      0 no lamps are known to be on
+    //      otherwise, bitfield of which lamps are on, in same order as received over J1939
+    ////////////////////////////////////////////////////////////////
+    int parseLampStatus(byte[] data, int startpos) {
+
+        int lamps = 0; // nothing is on until we say it is
+
+        // Each lamp on J1939 is two bits:
+        //  00 = Lamp is Off
+        //  01 = Lamp is On
+        //  10 = Error
+        //  11 = Unknown
+
+        if ((data[startpos] & 0x3) == 1) lamps |=1; // Protect Lamp
+        if ((data[startpos] & 0xC) == 4) lamps |=2; // Amber Lamp
+        if ((data[startpos] & 0x30) == 0x10) lamps |=4; // Red Lamp
+        if ((data[startpos] & 0xC0) == 0x40) lamps |=8; // MIL
+        if ((data[startpos+1] & 0x3) == 1) lamps |=16; // reserved lamp
+        if ((data[startpos+1] & 0xC) == 4) lamps |=32; // reserved lamp
+        if ((data[startpos+1] & 0x30) == 0x10) lamps |=64; // reserved lamp
+        if ((data[startpos+1] & 0xC0) == 0x40) lamps |=128; // reserved lamp
+
+        return lamps;
+    } // parseLampStatus()
+
 
     ////////////////////////////////////////////////////////////////
     //  parseTroubleCode
-    //      parses out a trouble code
+    //      parses out a trouble code from J1939 data
     //  returns:
     //      0 if the DTC is invalid (not a DTC)
     //      otherwise, returns the 4 byte DTC
@@ -1794,6 +1832,7 @@ public class J1939 extends EngineBus {
 
         fmi = (data[2+startpos] & 0x1F);
         oc = (data[3+startpos] & 0x7F);
+
 
         if (cm == 0) {
             // Standard conversion format (version 4)
@@ -2060,7 +2099,7 @@ public class J1939 extends EngineBus {
             case PGN_PARKING: //Cruise Control + Vehicle Speed
             case PGN_GEAR: // ETC2 message
 
-                parsePGN(pgn, packet.data, 8);
+                parsePGN(packet.source_address, pgn, packet.data, 8);
                 return PARSED_PACKET_TYPE_PGN; // parsed a PGN packet
         }
 

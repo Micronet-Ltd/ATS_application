@@ -205,6 +205,7 @@ public class J1939Test extends AndroidTestCase {
     } // test_receiveAddressRequest()
 
     public void test_parseTroubleCode() {
+        // test parsing a trouble code from the 4-byte fault code portion of an DM message
 
         byte[] input = new byte[] { 0x20, 0x21, 0x22, 0x23, (byte) 0x90, (byte) 0x91, (byte) 0x92, (byte) 0x93};
         long res;
@@ -257,8 +258,9 @@ public class J1939Test extends AndroidTestCase {
         assertTrue(j1939.outgoingList.isEmpty());
 
         // First Data packet
-        // first byte is MILs, second byte is reserved, then 4 byte DTCs
-        frame = new J1939.CanFrame(0x14EBFFCC, new byte[] {1 , 0 , 0, 0x61, 0x62, 0x63, 0x64, (byte) 0x85});
+        // first byte is MILs (2 bits each, second byte is reserved, then 4 byte DTCs
+        // 0xE4 = b11100100 (only "01" is considered on, everything else is considered off)
+        frame = new J1939.CanFrame(0x14EBFFCC, new byte[] {1 , (byte) 0xE4 , 0, 0x61, 0x62, 0x63, 0x64, (byte) 0x85});
         assertEquals(J1939.PARSED_PACKET_TYPE_CONTROL, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
         assertTrue(j1939.outgoingList.isEmpty());
 
@@ -271,16 +273,19 @@ public class J1939Test extends AndroidTestCase {
 
         // Verify that the DTCs were received correctly
         assertEquals(j1939.collectedDtcs.size(), 2);
+        assertEquals(j1939.collectedLampsBf, 2);
 
 
         // J1939 DTCs
         //  occurence_count is 7 LSbits of final (4th) byte
 
         // DTC #1 was sent as 0x61, 0x62, 0x63, 0x64
+        assertEquals(j1939.collectedDtcs.get(0).source_address, 0xCC);
         assertEquals(j1939.collectedDtcs.get(0).dtc_value, (long) 0x00636261L);
         assertEquals(j1939.collectedDtcs.get(0).occurence_count, (0x64 & 0x7F));
 
         // DTC #1 was sent as 0x85, 0x87, 0x88, 0x88
+        assertEquals(j1939.collectedDtcs.get(1).source_address, 0xCC);
         assertEquals(j1939.collectedDtcs.get(1).dtc_value, (long) 0x80878685L);
         assertEquals(j1939.collectedDtcs.get(1).occurence_count, (0x88 & 0x7F));
 
@@ -293,8 +298,8 @@ public class J1939Test extends AndroidTestCase {
         // source address = CD (random, but differnet than above)
         // Data:    First two byutes are lamp status
         //          followed by 4 byte DTC
-
-        frame = new J1939.CanFrame(0x14FECACD, new byte[] {0 , 0 , 0x61, 0x62,0x63,0x65, (byte) 0xFF, (byte) 0xFF});
+        // 0xAA = MILS, 2 bits each, everything except value "01" for the 2 bits is considered off
+        frame = new J1939.CanFrame(0x14FECACC, new byte[] {(byte) 0xAA , 0 , 0x61, 0x62,0x63,0x65, (byte) 0xFF, (byte) 0xFF});
         assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
 
         // Since this is broadcast, there should be no response from us
@@ -302,15 +307,34 @@ public class J1939Test extends AndroidTestCase {
 
         // check that nothing was added
         assertEquals(j1939.collectedDtcs.size(), 2);
+        assertEquals(j1939.collectedLampsBf, 2); // still the same as last time
+
         // but occurrence count has changed on first dtc
         assertEquals(j1939.collectedDtcs.get(0).dtc_value, (long) 0x00636261L);
         assertEquals(j1939.collectedDtcs.get(0).occurence_count, (0x65 & 0x7F));
 
 
         /////////////
-        //  Now give a new DTC and see that it is added
+        //  Now give a new source address and see that it is added
+        // 0x00 = MILS, 2 bits each, everything except value "01" for the 2 bits is considered off
+        frame = new J1939.CanFrame(0x14FECACD, new byte[] {0 , 0 , 0x61, 0x62,0x63,0x60, (byte) 0xFF, (byte) 0xFF});
+        assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packe
 
-        frame = new J1939.CanFrame(0x14FECACD, new byte[] {0 , 0 , 0x41, 0x42,0x43, (byte) 0x81, (byte) 0xFF, (byte) 0xFF});
+        // Since this is broadcast, there should be no response from us
+        assertTrue(j1939.outgoingList.isEmpty());
+
+        assertEquals(j1939.collectedDtcs.size(), 3);
+        assertEquals(j1939.collectedLampsBf, 2); // still unchanged
+
+        assertEquals(j1939.collectedDtcs.get(2).source_address, 0xCD);
+        assertEquals(j1939.collectedDtcs.get(2).dtc_value, (long)  0x00636261L);
+        assertEquals(j1939.collectedDtcs.get(2).occurence_count, (0x60 & 0x7F));
+
+        /////////////
+        //  Now give a new DTC and see that it is also added
+        // MILS, 2 bits each, everything except value "01" for the 2 bits is considered off
+        //  0x4F = 01001111
+        frame = new J1939.CanFrame(0x14FECACE, new byte[] {(byte) 0x4F , 0 , 0x41, 0x42,0x43, (byte) 0x81, (byte) 0xFF, (byte) 0xFF});
         assertEquals(J1939.PARSED_PACKET_TYPE_PGN, j1939.receiveCANFrame(frame)); // 2 means parsed as control packet
 
         // Since this is broadcast, there should be no response from us
@@ -318,31 +342,46 @@ public class J1939Test extends AndroidTestCase {
 
 
         // check that it was added, but others remain unchanged
-        assertEquals(j1939.collectedDtcs.size(), 3);
+        assertEquals(j1939.collectedDtcs.size(), 4);
+        assertEquals(j1939.collectedLampsBf, 0x0A); // added the bit3 for 3rd lamp to prior value
+
+        assertEquals(j1939.collectedDtcs.get(0).source_address, 0xCC);
         assertEquals(j1939.collectedDtcs.get(0).dtc_value, (long) 0x00636261L);
         assertEquals(j1939.collectedDtcs.get(0).occurence_count, (0x65 & 0x7F));
+        assertEquals(j1939.collectedDtcs.get(1).source_address, 0xCC);
         assertEquals(j1939.collectedDtcs.get(1).dtc_value, (long) 0x80878685L);
         assertEquals(j1939.collectedDtcs.get(1).occurence_count, (0x88 & 0x7F));
-        assertEquals(j1939.collectedDtcs.get(2).dtc_value, (long) 0x80434241L);
-        assertEquals(j1939.collectedDtcs.get(2).occurence_count, 1);
+
+        assertEquals(j1939.collectedDtcs.get(2).source_address, 0xCD);
+        assertEquals(j1939.collectedDtcs.get(2).dtc_value, (long)  0x00636261L);
+        assertEquals(j1939.collectedDtcs.get(2).occurence_count, (0x60 & 0x7F));
+
+        assertEquals(j1939.collectedDtcs.get(3).source_address, 0xCE);
+        assertEquals(j1939.collectedDtcs.get(3).dtc_value, (long) 0x80434241L);
+        assertEquals(j1939.collectedDtcs.get(3).occurence_count, (0x81 & 0x7F));
 
 
     } // test_receiveDM1()
 
 
-    public void test_processCollectedDTCs() {
-        // Tests ability to process the collected DTCs
+    public void test_processCollectedDTCsAndLamps() {
+        // Tests ability to process the collected DTCs and Lamp status
 
         // setup
 
         j1939.myBusType = Engine.BUS_TYPE_J1939_250K;
         j1939.engine.current_dtcs.clear();
         j1939.collectedDtcs.clear();
+        j1939.collectedLampsBf = 0;
 
         J1939.Dtc dtc1 = new J1939.Dtc();
         J1939.Dtc dtc2 = new J1939.Dtc();
         J1939.Dtc dtc3 = new J1939.Dtc();
 
+
+        dtc1.source_address = 0;
+        dtc2.source_address = 0x17;
+        dtc3.source_address = 0x17;
         dtc1.occurence_count = 3;
         dtc2.occurence_count = 5;
         dtc3.occurence_count = 0x74;
@@ -350,27 +389,46 @@ public class J1939Test extends AndroidTestCase {
         dtc2.dtc_value = 0x00272829L;
         dtc3.dtc_value = 0x803A3B3CL;
 
+        j1939.addLamps(4);
+        j1939.addLamps(2);
+
         j1939.addDtc(dtc1);
         j1939.addDtc(dtc2);
         j1939.addDtc(dtc3);
 
         assertEquals(j1939.engine.current_dtcs.size(), 0);
         assertEquals(j1939.collectedDtcs.size(), 3);
+        assertEquals(j1939.collectedLampsBf, 6);
 
         // process these (move them to the engine DTC collection)
-        j1939.processCollectedDTCs();
+        j1939.processCollectedDTCsAndLamps();
 
         assertEquals(j1939.collectedDtcs.size(), 0);
+        assertEquals(j1939.collectedLampsBf, 0);
+
+
+        assertEquals(j1939.numCollectedDtcs, 3);
         assertEquals(j1939.engine.current_dtcs.size(), 3);
+
+        assertEquals(j1939.lampStatus, 6);
+        assertEquals(j1939.engine.status.lamps_bf, 6);
+
+
+
         assertEquals(Engine.BUS_TYPE_J1939_250K, j1939.engine.current_dtcs.get(0).bus_type);
         assertEquals(0x80121314L, j1939.engine.current_dtcs.get(0).dtc_value);
+        assertEquals(0, j1939.engine.current_dtcs.get(0).source_address);
+
         assertEquals(Engine.BUS_TYPE_J1939_250K, j1939.engine.current_dtcs.get(1).bus_type);
         assertEquals(0x00272829L, j1939.engine.current_dtcs.get(1).dtc_value);
+        assertEquals(0x17, j1939.engine.current_dtcs.get(1).source_address);
+
         assertEquals(Engine.BUS_TYPE_J1939_250K, j1939.engine.current_dtcs.get(2).bus_type);
         assertEquals(0x803A3B3CL, j1939.engine.current_dtcs.get(2).dtc_value);
+        assertEquals(0x17, j1939.engine.current_dtcs.get(2).source_address);
 
 
-    } // test_processCollectedDTCs()
+    } // test_processCollectedDTCsAndLamps()
 
     public void test_receiveVIN() {
         // test the ability of the code to receive a VIN over the transport protocol

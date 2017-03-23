@@ -176,6 +176,7 @@ public class J1587Test extends AndroidTestCase {
         // DTC #1
         assertEquals(j1587.collectedDtcs.get(0).dtc_value, (long) 0x00358064L);
         assertEquals(j1587.collectedDtcs.get(0).occurence_count, 0); // no occurrence count in a 2 byte DTC
+        assertEquals(j1587.collectedDtcs.get(0).source_address, 0xFF); // no source address ever
 
 
         //////////////////////////////////////////////////////////
@@ -197,12 +198,15 @@ public class J1587Test extends AndroidTestCase {
         // DTC #2
         assertEquals(j1587.collectedDtcs.get(1).dtc_value, (long) 0x00358164L);
         assertEquals(j1587.collectedDtcs.get(1).occurence_count, 0);
+        assertEquals(j1587.collectedDtcs.get(1).source_address, 0xFF); // no source address ever
         // DTC #3
         assertEquals(j1587.collectedDtcs.get(2).dtc_value, (long) 0x00338162L);
         assertEquals(j1587.collectedDtcs.get(2).occurence_count, 5);
+        assertEquals(j1587.collectedDtcs.get(2).source_address, 0xFF); // no source address ever
         // DTC #4
         assertEquals(j1587.collectedDtcs.get(3).dtc_value, (long) 0x00348161L);
         assertEquals(j1587.collectedDtcs.get(3).occurence_count, 0);
+        assertEquals(j1587.collectedDtcs.get(3).source_address, 0xFF); // no source address ever
 
 
         /////////////
@@ -246,7 +250,7 @@ public class J1587Test extends AndroidTestCase {
         // DTC #5
         assertEquals(j1587.collectedDtcs.get(4).dtc_value, (long) 0x00208010L);
         assertEquals(j1587.collectedDtcs.get(4).occurence_count, 0); // no occurrence count in a 2 byte DTC
-
+        assertEquals(j1587.collectedDtcs.get(4).source_address, 0xFF); // no source address ever
 
         /////////////
         // Add no DTCs reported by a module
@@ -268,6 +272,78 @@ public class J1587Test extends AndroidTestCase {
 
     } // test_receiveDiagnostics()
 
+    public void test_receiveLamps() {
+        // test the ability of the code to receive Lamp Status
+
+        // Setup
+        J1587.J1708Frame frame;
+        int[] results;
+
+        j1587.start();
+        j1587.outgoingList.clear();
+        j1587.clearCollectedDtcs();
+        assertTrue(j1587.outgoingList.isEmpty());
+
+        assertEquals(j1587.collectedLampsBf, 0);
+
+        // test lamp status
+        // Data:
+        //      Bytes 1 : Lamp Bitfield
+        //      2 bits each lamp: MSb - Reserved (1s), Protect, Amber, Red - LSb
+        //          everything except value "01" is considered off
+
+        // Add Protect lamp On
+        // 0xD8 = b11010010
+
+        frame = new J1587.J1708Frame();
+        frame.priority = 5;
+        frame.id = 0x80;
+        frame.data = new byte[]{(byte) J1587.PID_LAMPS, (byte) 0xD8};
+
+        results = j1587.receiveJ1708Frame(frame);
+        assertNotNull(results);
+        assertEquals(results.length, 1);
+        assertEquals(results[0], j1587.PID_LAMPS);
+        assertTrue(j1587.outgoingList.isEmpty()); // No Response needed
+
+
+        assertEquals(j1587.collectedLampsBf, 1); // 1 is the bit for Normalized Protect Lamp
+
+
+        // Now add one without any lamps on
+        // 0xFF
+
+        frame = new J1587.J1708Frame();
+        frame.priority = 5;
+        frame.id = 0x81;
+        frame.data = new byte[] {(byte) J1587.PID_LAMPS, (byte) 0xFF };
+
+        results = j1587.receiveJ1708Frame(frame);
+        assertNotNull(results);
+        assertEquals(results.length, 1);
+        assertEquals(results[0], j1587.PID_LAMPS);
+        assertTrue(j1587.outgoingList.isEmpty()); // No Response neede
+
+
+        assertEquals(j1587.collectedLampsBf, 1); // still the same
+
+        // Now add one with the Red Lamp On
+        // 0xF1 = b11110001
+
+        frame = new J1587.J1708Frame();
+        frame.priority = 5;
+        frame.id = 0x81;
+        frame.data = new byte[] {(byte) J1587.PID_LAMPS, (byte) 0xF1 };
+
+        results = j1587.receiveJ1708Frame(frame);
+        assertNotNull(results);
+        assertEquals(results.length, 1);
+        assertEquals(results[0], j1587.PID_LAMPS);
+        assertTrue(j1587.outgoingList.isEmpty()); // No Response neede
+
+
+        assertEquals(j1587.collectedLampsBf, 1 | 4); // 1 = Protect, 4 = Red
+    } // test_receiveLamps()
 
     public void test_receiveVIN() {
         // test the ability of the code to receive an Odometer value

@@ -6,13 +6,13 @@ android {
 		a300keys
     }
     compileSdkVersion 24
-    buildToolsVersion "21.1.2"
+    buildToolsVersion '25.0.0'
     defaultConfig {
         applicationId "com.micronet.dsc.ats"
         minSdkVersion 15
         targetSdkVersion 15
-        versionCode 250
-        versionName "2.5.0"
+        versionCode 260
+        versionName "2.6.0"
     }
     buildTypes {
         release {
