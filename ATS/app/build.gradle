@@ -11,8 +11,8 @@ android {
         applicationId "com.micronet.dsc.ats"
         minSdkVersion 15
         targetSdkVersion 15
-        versionCode 260
-        versionName "2.6.0"
+        versionCode 270
+        versionName "2.7.0"
     }
     buildTypes {
         release {

@@ -842,12 +842,16 @@ public class MainService extends Service {
     //  Boot Message
 
 
+    // place to store tha reboot status from the RTC
+    Power.RTCRebootStatusClass rtcRebootStatusClass = null;
     /////////////////////////////////////////////////////////////////////////
     // sendBootMessageAfterTimeout()
     //  called at startup, sends a Boot Message after some time elapses to get the data that needs to be incorporated
     /////////////////////////////////////////////////////////////////////////
     void sendBootMessageAfterTimeout() {
 
+        // We need to retrieve RTC status early, before we start setting alarms and stuff
+        rtcRebootStatusClass = Power.getRTCRebootStatus();
 
         if (io.isFullyInitialized()) {
             // we need to send this message right away
@@ -868,7 +872,15 @@ public class MainService extends Service {
         if (io.isFullyInitialized()) {
             io_boot_state = io.getBootState();
         }
-        byte[] data = Codec.dataForSystemBoot(io_boot_state);
+
+        // Get the system uptime
+        //  This can help determine when the boot_inputs and RTC is valid
+        //up time: 00:04:58, idle time: 00:03:29, sleep time: 00:00:00
+
+        long uptime_minutes = SystemClock.elapsedRealtime()/ 1000/60;
+        Log.d(TAG, "Elapsed realTime minutes since kernel boot = " + uptime_minutes);
+
+        byte[] data = Codec.dataForSystemBoot(io_boot_state, rtcRebootStatusClass, (int) uptime_minutes);
         addEventWithData(EventType.EVENT_TYPE_REBOOT, data); // system booted
     } // sendBootMessageNow()
 

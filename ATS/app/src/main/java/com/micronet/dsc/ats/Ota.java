@@ -594,6 +594,12 @@ public class Ota {
             if (nextseconds != 0) watchdogStage = 30;
         }
 
+        if ((nextseconds == 0) && (watchdogStage < 40)) {
+            nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_TIME_SHUTDOWN);
+            if (nextseconds != 0) watchdogStage = 40;
+        }
+
+
         if (nextseconds != 0) {
             Log.d(TAG, "Server-Comm Watchdog will escalate to stage " + (watchdogStage/10) + " in " +  nextseconds + " seconds");
             mainHandler.postDelayed(watchdogTask, nextseconds * 1000); // to ms from seconds
@@ -615,18 +621,32 @@ public class Ota {
             Log.v(TAG, "clearWatchdog()");
         }
 
-        mainHandler.removeCallbacks(airplaneToggleTask);
+        stopAirplaneToggling();
+        stopRilToggling();
         mainHandler.removeCallbacks(watchdogTask);
         watchdogStage= 0;
 
     } // clearWatchdog()
 
 
-
+    ///////////////////////////////////////////////////////////////
+    // startAirplaneToggling()
+    //  start toggling airplane mode
+    ///////////////////////////////////////////////////////////////
     private void startAirplaneToggling() {
         airplaneToggleStage = 0;
         mainHandler.postDelayed(airplaneToggleTask, 500); // try to start toggling, use minimal initial delay (0.5 seconds)
     }
+
+    ///////////////////////////////////////////////////////////////
+    // stopAirplaneToggling()
+    //  make sure we are no longer toggling airplane mode
+    ///////////////////////////////////////////////////////////////
+    private void stopAirplaneToggling() {
+        mainHandler.removeCallbacks(airplaneToggleTask);
+        service.power.setAirplaneMode(false); //we want to be out of airplane mode
+    }
+
 
     ///////////////////////////////////////////////////////////////
     // airplaneToggleTask()
@@ -649,14 +669,15 @@ public class Ota {
                         airplaneToggleStage |= 1;
                         mainHandler.postDelayed(airplaneToggleTask, WATCHDOG_AIRPLANE_TOGGLE_ON_MS); // come back in four seconds to turn airplane mode off
                         break;
-                    case 1:
+                    case 1: // Exit Airplane Mode
                         service.power.setAirplaneMode(false);
 
-                        nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_RETRY_AIRPLANE_SECONDS);
+                        nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_RETRY_SECONDS);
 
                         airplaneToggleStage = 0; // restart
                         if (nextseconds > 0) {
                             // come back in a bit to toggle airplane mode again
+                            Log.d(TAG, "Will retry in " + nextseconds + "s");
                             mainHandler.postDelayed(airplaneToggleTask, nextseconds * 1000); // convert from seconds to ms
                         }
                         break;
@@ -670,6 +691,70 @@ public class Ota {
         }
 
     }; // airplaneToggleTask()
+
+
+
+    ///////////////////////////////////////////////////////////////
+    // startRilToggling()
+    //  start toggling of RIL driver
+    ///////////////////////////////////////////////////////////////
+    private void startRilToggling() {
+        mainHandler.postDelayed(rilToggleTask, 500); // try to start toggling, use minimal initial delay (0.5 seconds)
+    }
+
+    ///////////////////////////////////////////////////////////////
+    // stopRilToggling()
+    //  make sure we are no longer restarting the RIL driver
+    ///////////////////////////////////////////////////////////////
+    private void stopRilToggling() {
+        mainHandler.removeCallbacks(rilToggleTask);
+    }
+
+
+    ///////////////////////////////////////////////////////////////
+    // rilToggleTask()
+    //  Timer that controls toggling of RIL Driver when started by the com watchdog
+    ///////////////////////////////////////////////////////////////
+    private Runnable rilToggleTask= new Runnable() {
+
+        @Override
+        public void run() {
+            try {
+                Log.i(TAG, "Server-Comm Watchdog ril driver restart");
+
+                int nextseconds;
+
+
+
+                int exitcode = service.power.restartRILDriver();
+
+                if (exitcode == 0) {
+                    // success
+                    service.addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_OTA_STAGE_RILDRIVER);
+                } else {
+                    // failure
+                    service.addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_OTA_STAGE_RILDRIVER_FAILURE);
+                }
+
+                nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_RETRY_SECONDS);
+
+                if (nextseconds > 0) {
+                    // come back in a bit to toggle airplane mode again
+                    Log.d(TAG, "Will retry in " + nextseconds + "s");
+                    mainHandler.postDelayed(rilToggleTask, nextseconds * 1000); // convert from seconds to ms
+                }
+
+
+            } catch(Exception e) {
+                Log.e(TAG + ".rilToggleTask", " + Exception " + e.toString(), e);
+                mainHandler.postDelayed(airplaneToggleTask, 2000); // not sure what to do ... try again in 2 sec ?
+                return;
+            }
+
+        }
+
+    }; // rilToggleTask()
+
 
     ///////////////////////////////////////////////////////////////
     // watchdogTask()
@@ -697,12 +782,18 @@ public class Ota {
                         escalateWatchdog(); // escalate to next stage
                         break;
 
-                    case 20: // Enter airplane mode
+                    case 20: // Start airplane mode toggling
                         startAirplaneToggling();
                         escalateWatchdog(); // escalate to next stage
                         break;
 
-                    case 30: // shutdown the device
+                    case 30: // restart the RIL driver
+                        stopAirplaneToggling();
+                        startRilToggling();
+                        escalateWatchdog(); // escalate to next stage
+                        break;
+                    case 40: // shutdown the device
+                        stopRilToggling();
                         service.addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_OTA_STAGE_REBOOT);
                         service.power.powerDown();
                         break;

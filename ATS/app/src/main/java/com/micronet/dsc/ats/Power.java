@@ -23,6 +23,8 @@ import android.provider.Settings;
 //import android.provider.Settings;
 //import android.support.v4.content.WakefulBroadcastReceiver;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -787,6 +789,87 @@ public class Power {
 
 
 
+    /////////////////////////////////////////////////////////////////////////////////
+    // restartRILDriver()
+    //  restarts the RIL driver (if setting and restarting airplane mode doesn't work
+    /////////////////////////////////////////////////////////////////////////////////
+    int restartRILDriver() {
+
+        // Note, this code will not work with or above android version 4.2
+
+        Log.i(TAG, "Restarting RIL Driver ");
+
+        String command;
+        command = "su -c 'setprop ctl.restart ril-daemon'";
+
+        int exitCode = -1; // error
+
+        try {
+            exitCode = Runtime.getRuntime().exec(new String[] { "sh", "-c", command } ).waitFor();
+        } catch (Exception e) {
+            Log.d(TAG, "Exception exec: " + command + ": " + e.getMessage());
+        }
+
+        Log.d(TAG, command + " returned " + exitCode);
+
+        // exitCode should be 0 if it completed successfully
+        return exitCode;
+    } // restartRILDriver
+
+
+
+
+    public static final int HWSTAT_BIT_RTC_DISCONNECTED = 0x010000;
+    public static final int HWSTAT_BIT_RTC_ALARMED = 0x020000;
+
+    public static class RTCRebootStatusClass {
+        boolean hasRTCcleared;
+        boolean hasRTCtriggered;
+    }
+
+
+    static RTCRebootStatusClass getRTCRebootStatus() {
+
+        Log.i(TAG, "Retrieving RTC reboot status ");
+
+        String command;
+        command = "cat /sys/module/device/parameters/hw_stat";
+        Log.d(TAG, "Running " + command);
+
+        String resultstr = "";
+        long resultlong = 0;
+        try {
+            java.lang.Process process = Runtime.getRuntime().exec(command);
+
+            BufferedReader bufferedReader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()));
+
+
+            resultstr = bufferedReader.readLine();
+
+            resultlong = Long.parseLong(resultstr, 10);
+        } catch (Exception e) {
+            Log.d(TAG, "Exception exec: " + command + ": " + e.getMessage());
+        }
+
+        Log.d(TAG, "RTC reboot status= " + (resultstr == null ? "NULL" : resultstr) + " parsed as " + resultlong);
+
+        RTCRebootStatusClass status = new RTCRebootStatusClass();
+
+
+        if ((resultlong & HWSTAT_BIT_RTC_DISCONNECTED) > 0) {
+            Log.d(TAG, "RTC was Cleared");
+            status.hasRTCcleared = true;
+        }
+
+        if ((resultlong & HWSTAT_BIT_RTC_ALARMED) > 0) {
+            Log.d(TAG, "RTC Alarm was triggered");
+            status.hasRTCtriggered = true;
+        }
+
+        return status;
+
+    } // getRTCRebootStatus()
 
 
 

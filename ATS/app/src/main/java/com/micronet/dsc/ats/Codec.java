@@ -711,20 +711,39 @@ public class Codec {
     // dataForSystemBoot()
     // returns 3 bytes of data for inclusion in System Boot message
     ///////////////////////////////////////////////////
-    public static byte[] dataForSystemBoot(int io_boot_state) {
+    public static byte[] dataForSystemBoot(int io_boot_state, Power.RTCRebootStatusClass rtcRebootStatus, int kernel_uptime_minutes) {
 
-        byte[] data = new byte[3];
+        byte[] data = new byte[5];
 
         // [0] = boot reason
         // [1..2] = ATS version code
 
         int i = BuildConfig.VERSION_CODE;
-                
-        data[0] = (byte) (io_boot_state & 0xFF);
+        if (io_boot_state == 0xFF)
+            data[0] = (byte) 0xFF;
+        else {
+            data[0] = (byte) (io_boot_state & 0xF);
+        }
         data[1] = (byte) (i & 0xFF);
         i >>=8;
         data[2] = (byte) (i & 0xFF);
-        
+
+        if (rtcRebootStatus == null) {
+            data[3] = (byte) 0xFF;
+        } else {
+            data[3]  = 0;
+            if (rtcRebootStatus.hasRTCtriggered) data[3] |= 1;
+            if (rtcRebootStatus.hasRTCcleared) data[3] |= 2;
+        }
+
+        if (kernel_uptime_minutes > 255) {
+            data[4] = (byte) 0xFF;
+        } else {
+            data[4] = (byte) kernel_uptime_minutes;
+        }
+
+
+
 
         return data;
 

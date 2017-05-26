@@ -99,8 +99,10 @@ public class Config {
     public static final int SETTING_COMWATCHDOG = 25;
         public static final int PARAMETER_COMWATCHDOG_TIME1 = 0; // udp socket reset seconds
         public static final int PARAMETER_COMWATCHDOG_TIME2 = 1; // start airplane toggle seconds
-        public static final int PARAMETER_COMWATCHDOG_TIME3 = 2; // shuit down device seconds
-        public static final int PARAMETER_COMWATCHDOG_RETRY_AIRPLANE_SECONDS = 3; // multiple airplane toggles
+        public static final int PARAMETER_COMWATCHDOG_TIME_SHUTDOWN = 2; // shut down device seconds
+        public static final int PARAMETER_COMWATCHDOG_RETRY_SECONDS = 3; // for multiple airplane toggles. RIL resets
+        public static final int PARAMETER_COMWATCHDOG_TIME3 = 4; // reset RIL driver
+
     public static final int SETTING_POWER = 26;
         public static final int PARAMETER_INITIAL_KEEPAWAKE = 0; // seconds
     public static final int SETTING_SECONDARY_SERVER_ADDRESS = 27; // Destination Server IP  | Server Port
@@ -159,7 +161,7 @@ public class Config {
             "200|20", // Cornering: cm/s^2, 1/10 seconds
             "0", // Do not send packets if cellular not active
             "1|20|40|0|0|0", // Input 6: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
-            "900|120|120|0", // server communication watchdog
+            "900|120|120|0|0|0", // server communication watchdog
             "30", // initial keep-awake
             "|0", // secondary server address
             "0", // secondary server port
@@ -499,7 +501,7 @@ public class Config {
             src = new File(source_path, filename);
             if (!src.exists()) return false; // the source file doesn't exist so we have nothing to do
         } catch (Exception e) {
-            Log.e(TAG, "Unable to create an object to reference the source File; " + e.toString());
+            Log.e(TAG, "Unable to reference file " + source_path + "; " + e.toString());
             return false;
         }
 
@@ -532,9 +534,9 @@ public class Config {
             inStream.close();
             outStream.close();
             success = true;
-            Log.i(TAG, FILENAMEKEY + " file has been overwritten with the alternate");
+            Log.i(TAG, filename + " file was replaced from " + source_path);
         } catch (Exception e) {
-            Log.w(TAG, "File copy not completed; " + e.toString());
+            Log.w(TAG, filename  + "file could not be copied; " + e.toString());
         } finally {
             try {
                 if (inStream != null)
@@ -560,14 +562,15 @@ public class Config {
 
             try {
                 src = new File(source_path, filename);
-                success = src.renameTo(new File(source_path, filename + ".bak"));
+                boolean rename_success = false;
+                rename_success = src.renameTo(new File(source_path, filename + ".bak"));
 
-                if (success)
+                if (rename_success)
                     Log.i(TAG, "New file archived to " + source_path + "/" + filename + ".bak");
                 else
-                    Log.e(TAG, "Unable to rename alternate copy of file to .bak; Check permissions.");
+                    Log.e(TAG, "Unable to add .bak extension to " + filename + "; Check directory " + source_path + " permissions.");
             } catch (Exception e) {
-                Log.e(TAG, "Unable to rename alternate copy of file to .bak; Check permissions;" + e.toString());
+                Log.e(TAG, "Unable to add .bak extension to " + filename + "; Check directory " + source_path + " permissions;" + e.toString());
             }
 
         }
