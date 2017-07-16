@@ -152,7 +152,13 @@ public class CodecTest extends AndroidTestCase {
 
         queueItem.event_type_id = EventType.EVENT_TYPE_REBOOT;
         Codec codec = new Codec(service);
-        queueItem.additional_data_bytes = codec.dataForSystemBoot(7); // boot_reason
+        Power.RTCRebootStatusClass rebootStatus = new Power.RTCRebootStatusClass();
+        rebootStatus.hasRTCcleared = false;
+        rebootStatus.hasRTCtriggered = false;
+        queueItem.additional_data_bytes = codec.dataForSystemBoot(7, // // boot_reason
+                rebootStatus,
+                0   // kernel minutes
+        );
 
         message = codec.encodeMessage(queueItem, connectInfo);
 
@@ -161,7 +167,9 @@ public class CodecTest extends AndroidTestCase {
         byte[] expectedRebootData = {
             0x03, 0x00,
             0x07,  // io_boot_reason
-            (ATS_TEST_VERSION & 0xFF), ((ATS_TEST_VERSION >> 8) & 0xFF)
+            (ATS_TEST_VERSION & 0xFF), ((ATS_TEST_VERSION >> 8) & 0xFF),
+                0x00, // reboot status reasons
+                0x00 // uptime minutes
         };
 
         byte[] expectedData = expectedRebootData;
@@ -287,13 +295,18 @@ public class CodecTest extends AndroidTestCase {
         // 152 = x0098
 
         Codec codec = new Codec(service);
-        byte[] data = codec.dataForSystemBoot(7);
+        Power.RTCRebootStatusClass rebootStatus = new Power.RTCRebootStatusClass();
+        rebootStatus.hasRTCcleared = false;
+        rebootStatus.hasRTCtriggered = false;
+        byte[] data = codec.dataForSystemBoot(7,
+                rebootStatus,
+                0);
 
 
 
         // ATS Version = 2.3.0 = 230
         //  you must set these last two bytes to be the correct version
-        byte[] expected = {7, (ATS_TEST_VERSION & 0xFF), ((ATS_TEST_VERSION >> 8) & 0xFF)};
+        byte[] expected = {7, (ATS_TEST_VERSION & 0xFF), ((ATS_TEST_VERSION >> 8) & 0xFF), 0, 0};
 
         assertEquals(expected.length, data.length);
         assertEquals(Arrays.toString(expected), Arrays.toString(data));

@@ -20,11 +20,13 @@ import android.net.NetworkInfo;
 import android.os.*;
 import android.os.Process;
 import android.provider.Settings;
+import android.telephony.TelephonyManager;
 //import android.provider.Settings;
 //import android.support.v4.content.WakefulBroadcastReceiver;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -787,6 +789,49 @@ public class Power {
 
     } // setAirplaneMode
 
+
+
+    /////////////////////////////////////////////////////////////////////////////////
+    // setMobileDataEnabled()
+    //  turns mobile data to enabled or disabled
+    /////////////////////////////////////////////////////////////////////////////////
+    void setMobileDataEnabled(boolean on) {
+
+        Log.i(TAG, "Setting Mobile Data Enabled = " + on);
+
+        // Toggle mobile data .. this uses reflection and may not work on future android versions
+
+        TelephonyManager telephonyManager = (TelephonyManager) service.context.getSystemService(Context.TELEPHONY_SERVICE);
+        try {
+            Method setMobileDataEnabledMethod = null;
+            setMobileDataEnabledMethod = telephonyManager.getClass().getDeclaredMethod("setDataEnabled", boolean.class);
+            if (null != setMobileDataEnabledMethod)
+            {
+                setMobileDataEnabledMethod.invoke(telephonyManager, on);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Exception setting mobile data state : " + e.getMessage());
+        }
+    } // setMobileDataEnabled()
+
+/*
+    //Function that gets the current Mobile Data State
+    public static Boolean getMobileDataState(Context context) {
+        TelephonyManager telephonyService = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+        try {
+            Method getMobileDataEnabledMethod = telephonyService.getClass().getDeclaredMethod("getDataEnabled");
+            getMobileDataEnabledMethod.setAccessible(true);
+            if (null != getMobileDataEnabledMethod) {
+                boolean mobileDataEnabled = (Boolean) getMobileDataEnabledMethod.invoke(telephonyService);
+                return mobileDataEnabled;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.e(TAG, "Error getting mobile data state", e);
+        }
+        return false;
+    }
+*/
 
 
     /////////////////////////////////////////////////////////////////////////////////

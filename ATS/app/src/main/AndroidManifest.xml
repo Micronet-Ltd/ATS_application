@@ -20,6 +20,9 @@
     <uses-permission android:name="android.permission.SET_TIME" />
     <uses-permission android:name="android.permission.REBOOT" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- permissions for turning on/ off mobile data -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
 
     <application
         android:allowBackup="true"

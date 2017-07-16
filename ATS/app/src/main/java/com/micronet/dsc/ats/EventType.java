@@ -95,6 +95,7 @@ public class EventType {
     public final static int ERROR_VBS_SERVICE_JAMMED = 2; // // VBS should be running, but it isn't ?
     public final static int ERROR_EXTERNAL_WATCHDOG = 9; // came from a different process .. may lead to loss of information
     public final static int ERROR_OTA_STAGE_UDP = 11;
+    public final static int ERROR_OTA_STAGE_MOBILEDATA = 13;
     public final static int ERROR_OTA_STAGE_AIRPLANEMODE = 15;
     public final static int ERROR_OTA_STAGE_RILDRIVER = 17;
     public final static int ERROR_OTA_STAGE_RILDRIVER_FAILURE = 18;

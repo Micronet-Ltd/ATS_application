@@ -40,6 +40,7 @@ public class Ota {
 
 
     public static final int WATCHDOG_AIRPLANE_TOGGLE_ON_MS = 4000; // keep airplane mode on for 4000 ms when toggling it.
+    public static final int WATCHDOG_MOBILEDATA_TOGGLE_ON_MS = 4000; // keep mobile data off for 4000 ms when toggling it.
 
     /*
     public static final int[] BACKOFF_DELAYS_SECONDS = {30, // 30 seconds
@@ -62,6 +63,7 @@ public class Ota {
 
     int watchdogStage = 0; // what stage the com watchdog is at.
     int airplaneToggleStage = 0; // what stage the airplane toggle portion of com watchdog is at (turn on or turn off)
+    int mobiledataToggleStage = 0; // what stage the mobile data toggle portion of com watchdog is at (turn on or turn off)
 
     // This app can communicate with multiple "Servers"
 
@@ -125,8 +127,9 @@ public class Ota {
         mainHandler  = new Handler();
         mainHandler.postDelayed(checkTask, CHECK_TIMER_MS_NORMAL);
 
-        // make sure we are not accidentally left in airplane mode
+        // make sure we are not accidentally left in airplane mode or with mobile data off
         service.power.setAirplaneMode(false);
+        service.power.setMobileDataEnabled(true);
     } // start()
 
     //////////////////////////////////////////////////////////////////
@@ -551,6 +554,12 @@ public class Ota {
     ///////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////
 
+    public static final int WATCHDOG_STAGE_OFF = 0;
+    public static final int WATCHDOG_STAGE_UDP = 1;
+    public static final int WATCHDOG_STAGE_MOBILEDATA = 2;
+    public static final int WATCHDOG_STAGE_AIRPLANE = 3;
+    public static final int WATCHDOG_STAGE_RILDRIVER = 4;
+    public static final int WATCHDOG_STAGE_POWERDOWN = 5;
 
 
     ///////////////////////////////////////////////////////////////
@@ -563,7 +572,7 @@ public class Ota {
 
 
         Log.vv(TAG, "startWatchdog() ");
-        if (watchdogStage != 0) return; // watchdog is already running
+        if (watchdogStage != WATCHDOG_STAGE_OFF) return; // watchdog is already running
 
         escalateWatchdog(); // escalate watchdog to the next stage
 
@@ -579,29 +588,37 @@ public class Ota {
         int nextseconds, nextstage;
         nextseconds = 0;
 
-        if (watchdogStage < 10) {
+        if (watchdogStage < WATCHDOG_STAGE_UDP) {
             nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_TIME1);
-            if (nextseconds != 0) watchdogStage = 10;
+            if (nextseconds != 0) watchdogStage = WATCHDOG_STAGE_UDP;
         }
 
-        if ((nextseconds == 0) && (watchdogStage < 20)) {
+        if ((nextseconds == 0) && (watchdogStage < WATCHDOG_STAGE_MOBILEDATA)) {
             nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_TIME2);
-            if (nextseconds != 0) watchdogStage = 20;
+            if (nextseconds != 0) watchdogStage = WATCHDOG_STAGE_MOBILEDATA;
         }
 
-        if ((nextseconds == 0) && (watchdogStage < 30)) {
+        // Do NOT ever toggle airplane mode
+        /*
+        if ((nextseconds == 0) && (watchdogStage < WATCHDOG_STAGE_AIRPLANE)) {
+            nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_TIME2);
+            if (nextseconds != 0) watchdogStage = WATCHDOG_STAGE_AIRPLANE;
+        }
+        */
+
+        if ((nextseconds == 0) && (watchdogStage < WATCHDOG_STAGE_RILDRIVER)) {
             nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_TIME3);
-            if (nextseconds != 0) watchdogStage = 30;
+            if (nextseconds != 0) watchdogStage = WATCHDOG_STAGE_RILDRIVER;
         }
 
-        if ((nextseconds == 0) && (watchdogStage < 40)) {
+        if ((nextseconds == 0) && (watchdogStage < WATCHDOG_STAGE_POWERDOWN)) {
             nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_TIME_SHUTDOWN);
-            if (nextseconds != 0) watchdogStage = 40;
+            if (nextseconds != 0) watchdogStage = WATCHDOG_STAGE_POWERDOWN;
         }
 
 
         if (nextseconds != 0) {
-            Log.d(TAG, "Server-Comm Watchdog will escalate to stage " + (watchdogStage/10) + " in " +  nextseconds + " seconds");
+            Log.d(TAG, "Server-Comm Watchdog will escalate to stage " + (watchdogStage) + " in " +  nextseconds + " seconds");
             mainHandler.postDelayed(watchdogTask, nextseconds * 1000); // to ms from seconds
         } else {
             //Log.d(TAG, "Server Comm watchdog not set");
@@ -621,12 +638,83 @@ public class Ota {
             Log.v(TAG, "clearWatchdog()");
         }
 
+        stopMobileDataToggling();
         stopAirplaneToggling();
         stopRilToggling();
         mainHandler.removeCallbacks(watchdogTask);
         watchdogStage= 0;
 
     } // clearWatchdog()
+
+
+
+    ///////////////////////////////////////////////////////////////
+    // startAirplaneToggling()
+    //  start toggling airplane mode
+    ///////////////////////////////////////////////////////////////
+    private void startMobileDataToggling() {
+        mobiledataToggleStage = 0;
+        mainHandler.postDelayed(mobileDataToggleTask, 500); // try to start toggling, use minimal initial delay (0.5 seconds)
+    }
+
+    ///////////////////////////////////////////////////////////////
+    // stopAirplaneToggling()
+    //  make sure we are no longer toggling airplane mode
+    ///////////////////////////////////////////////////////////////
+    private void stopMobileDataToggling() {
+        mainHandler.removeCallbacks(mobileDataToggleTask);
+        if (mobiledataToggleStage > 0) {
+            // if we turned mobile data off -- turn it back on
+            service.power.setMobileDataEnabled(true); //we want to be out of airplane mode
+        }
+    }
+
+
+    ///////////////////////////////////////////////////////////////
+    // mobileDataToggleTask()
+    //  Timer that controls toggling on and off of airplane mode when started by the com watchdog
+    ///////////////////////////////////////////////////////////////
+    private Runnable mobileDataToggleTask = new Runnable() {
+
+        @Override
+        public void run() {
+            try {
+                Log.i(TAG, "Server-Comm Watchdog mobile data toggle step " + mobiledataToggleStage );
+
+                int nextseconds;
+
+                switch (mobiledataToggleStage) {
+
+                    case 0: // Turn Mobile Data Off
+                        mobiledataToggleStage |= 1;
+                        service.addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_OTA_STAGE_MOBILEDATA);
+                        service.power.setMobileDataEnabled(false);
+                        mainHandler.postDelayed(mobileDataToggleTask, WATCHDOG_MOBILEDATA_TOGGLE_ON_MS); // come back in four seconds to turn airplane mode off
+                        break;
+                    case 1: // Turn Mobile Data On
+                        service.power.setMobileDataEnabled(true);
+
+                        nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_RETRY_SECONDS);
+
+                        mobiledataToggleStage = 0; // restart
+                        if (nextseconds > 0) {
+                            // come back in a bit to toggle airplane mode again
+                            Log.d(TAG, "Will retry mobile data toggle in " + nextseconds + "s");
+                            mainHandler.postDelayed(mobileDataToggleTask, nextseconds * 1000); // convert from seconds to ms
+                        }
+                        break;
+                }
+            } catch(Exception e) {
+                Log.e(TAG + ".mobileDataToggleTask", " + Exception (Stage " + mobiledataToggleStage + "): " + e.toString(), e);
+                mainHandler.postDelayed(mobileDataToggleTask, 4000); // not sure what to do ... try again in 4 sec ?
+                return;
+            }
+
+        }
+
+    }; // mobileDataToggleTask()
+
+
 
 
     ///////////////////////////////////////////////////////////////
@@ -644,7 +732,10 @@ public class Ota {
     ///////////////////////////////////////////////////////////////
     private void stopAirplaneToggling() {
         mainHandler.removeCallbacks(airplaneToggleTask);
-        service.power.setAirplaneMode(false); //we want to be out of airplane mode
+        if (airplaneToggleStage > 0) {
+            //we turned airplane mode on .. turn it back off
+            service.power.setAirplaneMode(false); // we want to be out of airplane mode
+        }
     }
 
 
@@ -663,13 +754,13 @@ public class Ota {
 
                 switch (airplaneToggleStage) {
 
-                    case 0: // Enter Airplane Mode
+                    case 0: // Turn Airplane Mode On
+                        airplaneToggleStage |= 1;
                         service.addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_OTA_STAGE_AIRPLANEMODE);
                         service.power.setAirplaneMode(true);
-                        airplaneToggleStage |= 1;
                         mainHandler.postDelayed(airplaneToggleTask, WATCHDOG_AIRPLANE_TOGGLE_ON_MS); // come back in four seconds to turn airplane mode off
                         break;
-                    case 1: // Exit Airplane Mode
+                    case 1: // Turn Airplane Mode Off
                         service.power.setAirplaneMode(false);
 
                         nextseconds = service.config.readParameterInt(Config.SETTING_COMWATCHDOG, Config.PARAMETER_COMWATCHDOG_RETRY_SECONDS);
@@ -677,14 +768,14 @@ public class Ota {
                         airplaneToggleStage = 0; // restart
                         if (nextseconds > 0) {
                             // come back in a bit to toggle airplane mode again
-                            Log.d(TAG, "Will retry in " + nextseconds + "s");
+                            Log.d(TAG, "Will retry airplane mode toggle in " + nextseconds + "s");
                             mainHandler.postDelayed(airplaneToggleTask, nextseconds * 1000); // convert from seconds to ms
                         }
                         break;
                 }
             } catch(Exception e) {
                 Log.e(TAG + ".airplaneToggleTask", " + Exception (Stage " + airplaneToggleStage + "): " + e.toString(), e);
-                mainHandler.postDelayed(airplaneToggleTask, 2000); // not sure what to do ... try again in 2 sec ?
+                mainHandler.postDelayed(airplaneToggleTask, 4000); // not sure what to do ... try again in 4 sec ?
                 return;
             }
 
@@ -747,7 +838,7 @@ public class Ota {
 
             } catch(Exception e) {
                 Log.e(TAG + ".rilToggleTask", " + Exception " + e.toString(), e);
-                mainHandler.postDelayed(airplaneToggleTask, 2000); // not sure what to do ... try again in 2 sec ?
+                mainHandler.postDelayed(airplaneToggleTask, 4000); // not sure what to do ... try again in 4 sec ?
                 return;
             }
 
@@ -766,11 +857,11 @@ public class Ota {
         public void run() {
             try {
                 //backoffUntilTimer = false;
-                Log.i(TAG, "Server-Comm Watchdog triggered @ stage=" + (watchdogStage/10) + " step " + (watchdogStage%10));
+                Log.i(TAG, "Server-Comm Watchdog triggered @ stage=" + watchdogStage);
 
                 switch(watchdogStage) {
 
-                    case 10: // first stage, attempt ____
+                    case WATCHDOG_STAGE_UDP: // first stage, attempt ____
                         // check back in xx
                         service.addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_OTA_STAGE_UDP);
                         for (int i = 0 ; i < NUM_SUPPORTED_SERVERS; i++) {
@@ -782,17 +873,26 @@ public class Ota {
                         escalateWatchdog(); // escalate to next stage
                         break;
 
-                    case 20: // Start airplane mode toggling
+                    case WATCHDOG_STAGE_MOBILEDATA: // Start airplane mode toggling
+                        startMobileDataToggling();
+                        escalateWatchdog(); // escalate to next stage
+                        break;
+
+                    case WATCHDOG_STAGE_AIRPLANE: // Start airplane mode toggling
+                        stopMobileDataToggling();
                         startAirplaneToggling();
                         escalateWatchdog(); // escalate to next stage
                         break;
 
-                    case 30: // restart the RIL driver
+                    case WATCHDOG_STAGE_RILDRIVER: // restart the RIL driver
+                        stopMobileDataToggling();
                         stopAirplaneToggling();
                         startRilToggling();
                         escalateWatchdog(); // escalate to next stage
                         break;
-                    case 40: // shutdown the device
+                    case WATCHDOG_STAGE_POWERDOWN: // shutdown the device
+                        stopMobileDataToggling();
+                        stopAirplaneToggling();
                         stopRilToggling();
                         service.addEventWithExtra(EventType.EVENT_TYPE_ERROR, EventType.ERROR_OTA_STAGE_REBOOT);
                         service.power.powerDown();
@@ -801,7 +901,7 @@ public class Ota {
 
             } catch(Exception e) {
                 Log.e(TAG + ".watchdogTask", " + Exception (Stage " + watchdogStage + "): " + e.toString(), e);
-                mainHandler.postDelayed(watchdogTask, 2000); // try again in 2 sec ?
+                mainHandler.postDelayed(watchdogTask, 4000); // try again in 4 sec ?
                 return;
             }
         }
