@@ -50,6 +50,12 @@ public class RBCReceiver extends BroadcastReceiver {
                 RBCClearer.clearRedbendFiles();
                 rememberVersion(context, version);
             }
+
+            // but if the tree.xml is ever zero bytes long, clear it out.
+            if (RBCClearer.isTreeXmlZeroBytes()) {
+                RBCClearer.clearRedbendFiles();
+            }
+
         }
 
         else
@@ -65,6 +71,7 @@ public class RBCReceiver extends BroadcastReceiver {
     ////////////////////////////////////////////////////////////////////
     // checkVersionChanged()
     // Is the new client version different from what we have remembered?
+    // Is that difference significant (not just the portion after the "-MN")?
     ////////////////////////////////////////////////////////////////////
     boolean checkVersionChanged(Context context, String new_version) {
 
@@ -74,9 +81,16 @@ public class RBCReceiver extends BroadcastReceiver {
 
         old_version = prefs.getString("version", "");
 
-        if (old_version.equals(new_version)) return false;
+        // only compare portion before the -MN. e.g. "10.2.1.7-MN-2" and "10.2.1.7-MN-3" will be considered identical
 
-        Log.d(TAG, "Redbend Client version has changed. Old version was = " + old_version);
+        String[] old_splits = old_version.split("-MN");
+        String[] new_splits = new_version.split("-MN");
+
+        Log.d(TAG, "Comparing Base Redbend Client versions: " + old_splits[0] + " to " + new_splits[0]);
+
+        if (old_splits[0].equals(new_splits[0])) return false;
+
+        Log.d(TAG, "Base Redbend Client version has changed. Old version was = " + old_version);
 
         return true;
 

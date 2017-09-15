@@ -6,14 +6,14 @@ android {
     }
 
     compileSdkVersion 23
-    buildToolsVersion "21.1.2"
+    buildToolsVersion '25.0.0'
 
     defaultConfig {
         applicationId "com.micronet.dsc.resetrb"
         minSdkVersion 15
         targetSdkVersion 15
         versionCode 210
-        versionName "2.1"
+        versionName "2.2"
     }
     buildTypes {
         release {

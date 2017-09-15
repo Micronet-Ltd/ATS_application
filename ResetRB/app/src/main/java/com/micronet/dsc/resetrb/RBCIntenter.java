@@ -33,7 +33,7 @@ public class RBCIntenter {
     // Start Actions:
     public static final String START_ACTION_CLEAR_INSTALL_LOCKS = "com.redbend.client.micronet.CLEAR_INSTALL_LOCKS";
     public static final String START_ACTION_ACQUIRE_INSTALL_LOCK = "com.redbend.client.micronet.ACQUIRE_INSTALL_LOCK";
-    public static final String START_ACTION_RELEASE_INSTALL_LOCK = "com.redbend.client.micronet.RELEASE_INSTLAL_LOCK";
+    public static final String START_ACTION_RELEASE_INSTALL_LOCK = "com.redbend.client.micronet.RELEASE_INSTALL_LOCK";
     public static final String START_ACTION_PING_CLIENT = "com.redbend.client.micronet.PING";
 
 
