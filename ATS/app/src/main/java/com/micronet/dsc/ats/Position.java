@@ -19,6 +19,12 @@ import android.os.SystemClock;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+// For permissions:
+import 	android.support.v4.content.ContextCompat;
+import android.content.pm.PackageManager;
+import android.Manifest;
+
+
 public class Position {
 
     public static final String TAG = "ATS-Position";
@@ -346,6 +352,22 @@ public class Position {
 
     ScheduledThreadPoolExecutor exec;
 
+    boolean hasPermission() {
+        if (ContextCompat.checkSelfPermission(service.context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "ACCESS_FINE_LOCATION permission has not been granted to app! ");
+            return false;
+        }
+        if (ContextCompat.checkSelfPermission(service.context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "ACCESS_COARSE_LOCATION permission has not been granted to app! ");
+            return false;
+        }
+        return true;
+
+    } // hasPermission()
+
+
+
+
     //////////////////////////////////////////////////////////////////
     // init()
     //  call this to initialize the last known location, etc. (called when app starts)
@@ -353,10 +375,16 @@ public class Position {
     public void init() {
         Log.v(TAG, "init()");
 
-        // just ask for the last known location
+        if (!hasPermission()) return;
 
-        LocationManager locationManager = (LocationManager) service.context.getSystemService(Context.LOCATION_SERVICE);
-        Location location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        // just ask for the last known location
+        Location location = null;
+        try {
+            LocationManager locationManager = (LocationManager) service.context.getSystemService(Context.LOCATION_SERVICE);
+            location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        } catch (Exception e) {
+            Log.e(TAG, "Unable to access last known location: " + e.getMessage());
+        }
 
         if (location == null)
             Log.d(TAG, "Last known location is null");
@@ -390,11 +418,19 @@ public class Position {
 
                 Log.v(TAG, "Setting up Location Listener");
 
-                LocationManager locationManager = (LocationManager) service.context.getSystemService(Context.LOCATION_SERVICE);
+                if (!hasPermission()) {
+                    Log.v(TAG, "Cannot start Location Listener b/c no permission exists");
+                } else {
+                    try {
+                        LocationManager locationManager = (LocationManager) service.context.getSystemService(Context.LOCATION_SERVICE);
 
+                        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 250, 0, locationListener); // every 250 ms
+                        locationManager.addGpsStatusListener(gpsStatusListener);
 
-                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 250,0, locationListener); // every 250 ms
-                locationManager.addGpsStatusListener(gpsStatusListener);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Unable to start location service updates: " + e.getMessage());
+                    }
+                }
 
 
                 exec = new ScheduledThreadPoolExecutor(1);
@@ -422,9 +458,13 @@ public class Position {
         // save the latest virtual odometer
         service.state.writeStateLong(State.VIRTUAL_ODOMETER, virtual_odometer_m);
 
-        LocationManager locationManager = (LocationManager) service.context.getSystemService(Context.LOCATION_SERVICE);
-        locationManager.removeUpdates(locationListener);
-        locationManager.removeGpsStatusListener(gpsStatusListener);
+        try {
+            LocationManager locationManager = (LocationManager) service.context.getSystemService(Context.LOCATION_SERVICE);
+            locationManager.removeUpdates(locationListener);
+            locationManager.removeGpsStatusListener(gpsStatusListener);
+        } catch (Exception e) {
+            Log.e(TAG, "Unable to remove location service updates: " + e.getMessage());
+        }
     }
 
 

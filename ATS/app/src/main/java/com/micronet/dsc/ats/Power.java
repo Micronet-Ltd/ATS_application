@@ -33,6 +33,8 @@ import java.util.TimeZone;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+
+
 public class Power {
 
 
@@ -93,6 +95,7 @@ public class Power {
 
     boolean powerdownWasSent = false; // this will be set to true once we send a power-down request so only one will be sent
 
+    boolean allowAtsPowerDowns = true; // allow ATS to power-down the device
     int initialStartUpTicks = 0; // number of seconds after starting during which Power Downs cannot be issued.
 
     public Power(MainService service) {
@@ -115,6 +118,12 @@ public class Power {
 
         // get the number of seconds during which we should not power-down after startup
         initialStartUpTicks = service.config.readParameterInt(Config.SETTING_POWER, Config.PARAMETER_INITIAL_KEEPAWAKE);
+        if (initialStartUpTicks == 0) {
+            allowAtsPowerDowns = false; // don't allow power-downs
+            Log.i(TAG, "ATS startup keep-awake is set to 0=forever.");
+        } else {
+            allowAtsPowerDowns = true; // allow power-downs (after the startup ticks expire)
+        }
 
         if (!service.isUnitTesting) {
 			// Do not start other threads if we are unit testing
@@ -382,11 +391,7 @@ public class Power {
 
         Log.i(TAG, " Next Alarm " + alarmName + " Cleared");
 
-                AlarmManager alarmservice = (AlarmManager) service.context.getSystemService(Context.ALARM_SERVICE);
-        // since target is 4.0.3, all alarms are exact
-        // for kit-kat or higher, if exact timing is needed
-        // alarmservice.setExact ( RTC_WAKEUP, long triggerAtMillis, PendingIntent operation)
-
+        AlarmManager alarmservice = (AlarmManager) service.context.getSystemService(Context.ALARM_SERVICE);
 
         Intent i = new Intent(service.context, AlarmReceiver.class); // it goes to this guy
         i.setAction(alarmName);
@@ -453,11 +458,7 @@ public class Power {
         ////////////////////////////////////////////////////////
         // tell android about this alarm
 
-        AlarmManager alarmservice = (AlarmManager) service.context.getSystemService(Context.ALARM_SERVICE);
-        // since target is 4.0.3, all alarms are exact
-        // for kit-kat or higher, if exact timing is needed
-        // alarmservice.setExact ( RTC_WAKEUP, long triggerAtMillis, PendingIntent operation)
-
+        AlarmManager alarmManager = (AlarmManager) service.context.getSystemService(Context.ALARM_SERVICE);
 
         Intent i = new Intent(service.context, AlarmReceiver.class); // it goes to this guy
         i.setAction(alarmName);
@@ -466,8 +467,47 @@ public class Power {
         //  acquired in time to actually start running code in the service.
         PendingIntent pi = PendingIntent.getBroadcast(service.context, alarm_request_code, i, PendingIntent.FLAG_CANCEL_CURRENT);
 
-        //alarmservice.set(AlarmManager.RTC_WAKEUP, next_heartbeat_time*1000, pi); // time is is ms
-        alarmservice.set(micronet.hardware.MicronetHardware.RTC_POWER_UP, next_alarm_time_s*1000, pi); // time is is ms
+
+
+
+        if (MainService.DEBUG_MICRONET_HARDWARE_LIBRARY_MISSING) {
+            // Cannot set Hardware wakeup time because no access to hardware library
+            Log.i(TAG, "*** Skipped setting powerup alarm (MainService.DEBUG_MICRONET_HARDWARE_LIBRARY_MISSING flag is set)");
+
+            // if targetSdkVersion is earlier than API 19 KITKAT than all alarms are exact,
+            //  after API 19 KITKAT, you MUST use setExact()
+            // after API 23 M, there is a setExactAndAllowWhileIdle()
+
+
+            // just set a normal alarm that will fire if device is already powered up
+            if (alarmManager != null) {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+                    alarmManager.set(AlarmManager.RTC_WAKEUP, next_alarm_time_s * 1000, pi); // time is is ms
+                } else
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.LOLLIPOP) {
+                    alarmManager.setExact(AlarmManager.RTC_WAKEUP, next_alarm_time_s * 1000, pi); // time is is ms
+                } else {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next_alarm_time_s * 1000, pi); // time is is ms
+                }
+            }
+            return;
+        }
+
+        if (alarmManager != null) {
+            HardwareWrapper.wakeupDevice(alarmManager, next_alarm_time_s * 1000, pi);
+                /*
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+                    alarmManager.set(HardwareWrapper.RTC_POWER_UP, next_alarm_time_s * 1000, pi); // time is is ms
+                } else
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.LOLLIPOP) {
+                    alarmManager.setExact(HardwareWrapper.RTC_POWER_UP, next_alarm_time_s * 1000, pi); // time is is ms
+                } else {
+                    alarmManager.setExactAndAllowWhileIdle(HardwareWrapper.RTC_POWER_UP, next_alarm_time_s * 1000, pi); // time is is ms
+                }
+                */
+        }
+
+
 
         // remember this so we can check at boot to see if boot was possible caused by heartbeat.
         service.state.writeStateLong(alarm_state_id, next_alarm_time_s);
@@ -771,14 +811,30 @@ public class Power {
     /////////////////////////////////////////////////////////////////////////////////
     void setAirplaneMode(boolean on) {
 
-        // Note, this code will not work with or above android version 4.2
+        // Note, this code will not work with or above android version 4.2 API 17 JELLYBEAN1
+
+        if (MainService.DEBUG_DO_NOT_CONTROL_AIRPLANE_MODE) {
+            Log.i(TAG, "*** Airplane Mode Control Ignored = " + on + " (MainService.DEBUG_DO_NOT_CONTROL_AIRPLANE_MODE flag is set)");
+            return;
+        }
+
+        if (BuildConfig.FLAVOR_DEVICE.equals(MainService.BUILD_FLAVOR_OBC5)) {
+            Log.i(TAG, "*** Airplane Mode Control Ignored = " + on + " (OBC HW does not control Airplane Mode)");
+            return;
+        }
 
 		Log.i(TAG, "Setting Airplane Mode = " + on);
 
         // Toggle airplane mode.
-        Settings.System.putInt(
-                service.context.getContentResolver(),
-                Settings.System.AIRPLANE_MODE_ON, on ? 1 : 0);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1) {
+            Settings.System.putInt(
+                    service.context.getContentResolver(),
+                    Settings.System.AIRPLANE_MODE_ON, on ? 1 : 0);
+        } else {
+            Settings.Global.putInt(
+                    service.context.getContentResolver(),
+                    Settings.Global.AIRPLANE_MODE_ON, on ? 1 : 0);
+        }
 
         // Post an intent to reload.
         Intent intent = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
@@ -797,23 +853,8 @@ public class Power {
 
         // Note, this code will not work with or above android version 4.2
 
-        Log.i(TAG, "Restarting RIL Driver ");
+        return HardwareWrapper.restartRILDriver();
 
-        String command;
-        command = "su -c 'setprop ctl.restart ril-daemon'";
-
-        int exitCode = -1; // error
-
-        try {
-            exitCode = Runtime.getRuntime().exec(new String[] { "sh", "-c", command } ).waitFor();
-        } catch (Exception e) {
-            Log.d(TAG, "Exception exec: " + command + ": " + e.getMessage());
-        }
-
-        Log.d(TAG, command + " returned " + exitCode);
-
-        // exitCode should be 0 if it completed successfully
-        return exitCode;
     } // restartRILDriver
 
 
@@ -880,9 +921,14 @@ public class Power {
     /////////////////////////////////////////////////////////////////////////////////
     boolean isScreenOn() {
         PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
-        return pm.isScreenOn();
-        // For API above 20:
-        //return pm.isInteractive();
+        if (pm != null) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT_WATCH) {
+                return pm.isScreenOn();
+            } else {
+                return pm.isInteractive();
+            }
+        }
+        return false; // assume screen not on if we can't tell
     }
 
 
@@ -940,8 +986,22 @@ public class Power {
 
             // Send the power down request
             powerdownWasSent = true;
-            PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
-            pm.reboot(micronet.hardware.MicronetHardware.SHUTDOWN_DEVICE);
+            PowerManager powerManager = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
+            if (powerManager != null) {
+
+                if (MainService.DEBUG_MICRONET_HARDWARE_LIBRARY_MISSING) {
+                    Log.i(TAG, "***  Skipped Powering Down (MainService.DEBUG_MICRONET_HARDWARE_LIBRARY_MISSING flag is set)");
+                    return;
+                } else
+                if (powerManager != null) {
+                    HardwareWrapper.shutdownDevice(powerManager);
+                }
+
+            } else {
+                Log.e(TAG, "Cannot acquire POWER_SERVICE to shutdown");
+            }
+
+
         }
 
     } // powerDown()
@@ -969,7 +1029,11 @@ public class Power {
             // Send the reboot request
             powerdownWasSent = true;
             PowerManager pm = (PowerManager) service.context.getSystemService(Context.POWER_SERVICE);
-            pm.reboot(null);
+            if (pm != null) {
+                pm.reboot(null);
+            } else {
+                Log.e(TAG, "Cannot acquire POWER_SERVICE to reboot");
+            }
         }
     } // reboot()
 
@@ -1054,7 +1118,9 @@ public class Power {
 
                 }
 
-                if (initialStartUpTicks == 0) { // we are not in the startup window
+                if ((allowAtsPowerDowns == true) &&
+                   (initialStartUpTicks == 0)) { // we are not in the startup window
+
                     if ((service.SHOULD_KEEP_SCREEN_ON) || // if we are always keeping screen on
                             (!isScreenOn())) { // or if screen is off
                         // then we can power down when there are no wakelocks
@@ -1414,6 +1480,7 @@ public class Power {
         service.context.startService(serviceIntent);
 
     } // resetFotaUpdater()
+
 
 
 } // class

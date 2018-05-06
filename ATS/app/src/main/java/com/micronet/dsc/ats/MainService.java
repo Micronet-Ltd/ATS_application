@@ -55,7 +55,15 @@ public class MainService extends Service {
     ///////////////////////////////////////////
     // Debug Options -- these should all be false before releasing
     public static final boolean DEBUG_IO_IGNORE_VOLTAGE_FOR_ENGINE_STATUS = false;
+    public static final boolean DEBUG_MICRONET_HARDWARE_LIBRARY_MISSING = false; // if true, fake or Skip ALL calls to Micronet Hardware Library
+    public static final boolean DEBUG_DO_NOT_CONTROL_AIRPLANE_MODE = false; // if true, then don't try to set or clear airplane mode
 
+
+
+    ///////////////////////////////////////////
+    // Build Flavors -- these are used in the code to determine the flavor. They should match gradle
+    public static final String BUILD_FLAVOR_A317 = "a317";
+    public static final String BUILD_FLAVOR_OBC5 = "obc5";
 
 
 
@@ -177,7 +185,7 @@ public class MainService extends Service {
             state.writeState(State.PRECHANGED_CONFIG_FILES_BF, 0);
 
         } else {
-            Log.i(TAG, "No new configuration files found");
+            Log.i(TAG, "Configuration was not changed while this service was off");
         }
 
 

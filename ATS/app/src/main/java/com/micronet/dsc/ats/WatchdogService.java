@@ -293,6 +293,7 @@ public class WatchdogService extends Service {
         public void onReceive(Context context, Intent intent)
         {
             // Update the last time we got this
+            Log.d(TAG, "MonitorReceiver::onReceive():");
             lastReceivedTime = SystemClock.elapsedRealtime();
 
         }

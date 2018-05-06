@@ -25,8 +25,14 @@ public class Config {
     private static final String FILENAMEKEY = "configuration";
 
     // Paths of the files (used for copying from the alternate to the real location)
-    private static final String FILENAME_ALTERNATE_PATH = "/internal_Storage/ATS";
-    private static final String FILENAME_STANDARD_PATH = "/data/data/" + BuildConfig.APPLICATION_ID + "/shared_prefs";
+    //private static final String FILENAME_ALTERNATE_PATH = "/internal_Storage/ATS";
+
+    public static final String[] FILENAME_ALTERNATE_PATHS = {
+            "/internal_Storage/ATS", // directory on the Android 4.0 A-317 series
+            "/storage/sdcard0/ATS" // directory on the Android 5.0 OBC series
+        };
+
+    public static final String FILENAME_STANDARD_PATH = "/data/data/" + BuildConfig.APPLICATION_ID + "/shared_prefs";
 
     // Units are seconds or meters unless otherwise indicated
 
@@ -162,7 +168,7 @@ public class Config {
             "0", // Do not send packets if cellular not active
             "1|20|40|0|0|0", // Input 6: bias, 1/10s debounce-on, 1/10s delay, 1/10s keep-alive, bf messages, 1/10s debounce-off (0 = same as on)
             "900|120|120|0|0|0", // server communication watchdog
-            "30", // initial keep-awake
+            "120", // initial keep-awake
             "|0", // secondary server address
             "0", // secondary server port
             "10|10|15|15|20|20|60", //secondary server backoff/retry
@@ -215,7 +221,7 @@ public class Config {
     public static int init() {
 
         Log.d(TAG, "Init shared prefs " + FILENAMEKEY);
-        boolean file_copied = copyFile(FILENAME_ALTERNATE_PATH, FILENAME_STANDARD_PATH, FILENAMEKEY + ".xml");
+        boolean file_copied = copyFile(FILENAME_ALTERNATE_PATHS, FILENAME_STANDARD_PATH, FILENAMEKEY + ".xml");
         return (file_copied ? EventType.CONFIG_FILE_SETTINGS : 0);
     }
 
@@ -306,7 +312,13 @@ public class Config {
         if (!settingExists(setting_id)) return null;
 
         String defaultValue = getDefaultValue(setting_id);
-        return sharedPref.getString(Integer.toString(setting_id), defaultValue);
+        String s = sharedPref.getString(Integer.toString(setting_id), null);
+
+        if (s == null) {
+            Log.i(TAG,"Using default value for setting " + setting_id + " = " + defaultValue);
+            return defaultValue;
+        }
+        return s;
     }
 
 /*
@@ -486,9 +498,10 @@ public class Config {
     //  copies the config file from the alternate location (if exists) to the
     //      real location where it can be read into memory
     //  then renames to .bak, deleting any existing file with that name
+    //  source_paths : the directories to try, in order, until one of them exists
     //  Returns true if a file was copied, false if it was not
     ///////////////////////////////////////////////////
-    public static boolean copyFile(String source_path, String destination_path, String filename) {
+    public static boolean copyFile(String[] source_paths, String destination_path, String filename) {
         FileInputStream inStream = null;
         FileOutputStream outStream = null;
         File src = null;
@@ -496,6 +509,24 @@ public class Config {
 
         boolean success = false;
 
+        //Log.d(TAG, "Checking source paths for copyFile()");
+
+        int i;
+        for (i=0 ; i < source_paths.length; i++) {
+            //Log.d(TAG, "Checking source path: " + source_paths[i]);
+
+            if (new File(source_paths[i]).exists()) { break; }
+        }
+
+        if (i >= source_paths.length) {
+            // None of the source directories exist
+            Log.d(TAG, "No configuration source directories exist");
+            return false;
+        }
+
+        String source_path = source_paths[i];
+
+        //Log.d(TAG, "Found configuration source path (" + i + "): " + source_path);
 
         try {
             src = new File(source_path, filename);

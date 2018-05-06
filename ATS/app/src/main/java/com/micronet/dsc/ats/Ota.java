@@ -933,7 +933,11 @@ public class Ota {
         // Is there something in the queue to send ?
         QueueItem queueItem = service.queue.getFirstItem(server_number);
 
-        if (queueItem == null) return false; // nothing in queue to attempt
+        if (queueItem == null) {
+            Log.vv(TAG, "Queue is empty (" + servers[server_number].name + ")");
+            return false; // nothing in queue to attempt
+
+        }
 
         if (server_number == 0) { // only start watchdog for primary server
             startWatchdog(); // start the watchdog timer if it is not already running
@@ -942,10 +946,16 @@ public class Ota {
         // Now that the watchdog is running, we can see if it is OK to attempt a send.
         // Watchdog will fire even if we never attempt a send in case we are stuck somewhere else
 
-        if (servers[server_number].backoff.isInBackoff()) return false;    // in a back-off period, cannot make an attempt yet
+        if (servers[server_number].backoff.isInBackoff()) {
+            Log.vv(TAG, "Server is in backoff (" + servers[server_number].name + ")");
+            return false;    // in a back-off period, cannot make an attempt yet
+        }
 
         NetworkInfo active = isDataNetworkConnected();
-        if (active == null) return false; // we have no connection to an acceptable data network
+        if (active == null) {
+            Log.v(TAG, "Data Network is not connected");
+            return false; // we have no connection to an acceptable data network
+        }
 
         // TODO: signal strength check ?
         //   A: don't do this for now as the platform has problems reporting the correct signal strength (Apr2014)
@@ -953,7 +963,10 @@ public class Ota {
 
         // Make sure that the IO is fully initialized
 
-        if (!service.io.isFullyInitialized()) return false; // do nothing until we have initialized IO calls
+        if (!service.io.isFullyInitialized()) {
+            Log.vv(TAG, "I/O not fully initialized");
+            return false; // do nothing until we have initialized IO calls
+        }
 
 
         Log.vv(TAG, "Sending over network type " + active.getTypeName());

@@ -86,7 +86,7 @@ public class Io {
     public class DeviceConstants {
         String deviceId = DEFAULT_SERIAL_NUMBER; // stores the serial-number (ID) of the device that will be used in OTA.
         int deviceBootCapturedInputs = 0;       // stores the boot-captures flags of the inputs during boot
-        int io_scheme = IoService.IO_SCHEME_DEFAULT;
+        int io_scheme = HardwareWrapper.IO_SCHEME_DEFAULT;
         boolean isValid = false; // this gets set to true once we have valid info from the Hardware API
     }
     DeviceConstants deviceConstants = new DeviceConstants(); // just to make passing these variables around easier
@@ -502,26 +502,14 @@ public class Io {
     //  Sometimes the values we get back from the hardware API are untrustworthy (like in shutdown)
     //      this corrects those values
     /////////////////////////////////////////////////////////////
-    private void correctHardwareInputs(int io_scheme, IoService.HardwareInputResults hardwareInputResults) {
+    private void correctHardwareInputs(int io_scheme,
+       IoServiceHardwareWrapper.HardwareInputResults hardwareInputResults) {
 
-
-        // The following was used before we decided to disable float-detection on IO Scheme 6.
-
-
-        // In Scheme 6, Inputs 4, 5 and 6 (the tri-state inputs) are untrustworthy if they report a ground during the shutdown window
-        if (io_scheme == IoService.IO_SCHEME_6) {
-            if (inShutdownWindow) {
-
-                if (hardwareInputResults.input4 == 0)
-                    hardwareInputResults.input4 = IoService.HW_INPUT_UNKNOWN;
-                if (hardwareInputResults.input5 == 0)
-                    hardwareInputResults.input5 = IoService.HW_INPUT_UNKNOWN;
-                if (hardwareInputResults.input6 == 0)
-                    hardwareInputResults.input6 = IoService.HW_INPUT_UNKNOWN;
-
-            }
+        // certain conditions can cause the I/O values that we previously read to be untrustworthy in shutdown.
+        if (inShutdownWindow) {
+            // set the untrustworthy values to an unknown
+            HardwareWrapper.setUntrustworthyShutdown(io_scheme, hardwareInputResults);
         }
-
 
     } // correctHardwareInputs()
 
@@ -879,7 +867,7 @@ public class Io {
         int active_level_i = service.config.readParameterInt(setting_id, Config.PARAMETER_INPUT_GP_BIAS);
         boolean logical_on; // the instantaneous logical state
 
-        if (physical_on == IoService.HW_INPUT_FLOAT)  // physically floating, this means we are logically inactive
+        if (physical_on == IoServiceHardwareWrapper.HW_INPUT_FLOAT)  // physically floating, this means we are logically inactive
             logical_on = false;
         else if (active_level_i == 0) // this input is active-low, convert
             logical_on = (physical_on == 1 ? false : true);
@@ -1082,8 +1070,8 @@ public class Io {
 
 
 
-    IoService.HardwareInputResults parseReceivedHardwareInputs(Intent intent) {
-        IoService.HardwareInputResults hir = new IoService.HardwareInputResults();
+    IoServiceHardwareWrapper.HardwareInputResults parseReceivedHardwareInputs(Intent intent) {
+        IoServiceHardwareWrapper.HardwareInputResults hir = new IoServiceHardwareWrapper.HardwareInputResults();
 
         hir.ignition_input = intent.getBooleanExtra("ignition_input", false);
         hir.ignition_valid = intent.getBooleanExtra("ignition_valid", false);
@@ -1127,7 +1115,9 @@ public class Io {
                 lastIoReceived = SystemClock.elapsedRealtime();
 
 
-                IoService.HardwareInputResults hardwareInputResults = parseReceivedHardwareInputs(intent);
+                IoServiceHardwareWrapper.HardwareInputResults hardwareInputResults;
+
+                hardwareInputResults= parseReceivedHardwareInputs(intent);
 
                 double voltage_input;
                 boolean ignition_input, ignition_valid;
@@ -1173,12 +1163,12 @@ public class Io {
                     Log.d(TAG, "Inputs (Phy): " +
                                     (voltage_input) + "V" +
                                     " , IGN:" + (ignition_valid ? (ignition_input ? "1" : "0") : "?") +
-                                    " , IN1:" + (input1 == IoService.HW_INPUT_UNKNOWN ? "?" : (input1 == IoService.HW_INPUT_FLOAT ? "F" : input1)) +
-                                    " , IN2:" + (input2 == IoService.HW_INPUT_UNKNOWN ? "?" : (input2 == IoService.HW_INPUT_FLOAT ? "F" : input2)) +
-                                    " , IN3:" + (input3 == IoService.HW_INPUT_UNKNOWN ? "?" : (input3 == IoService.HW_INPUT_FLOAT ? "F" : input3)) +
-                                    " , IN4:" + (input4 == IoService.HW_INPUT_UNKNOWN ? "?" : (input4 == IoService.HW_INPUT_FLOAT ? "F" : input4)) +
-                                    " , IN5:" + (input5 == IoService.HW_INPUT_UNKNOWN ? "?" : (input5 == IoService.HW_INPUT_FLOAT ? "F" : input5)) +
-                                    " , IN6:" + (input6 == IoService.HW_INPUT_UNKNOWN ? "?" : (input6 == IoService.HW_INPUT_FLOAT ? "F" : input6))
+                                    " , IN1:" + (input1 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input1 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input1)) +
+                                    " , IN2:" + (input2 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input2 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input2)) +
+                                    " , IN3:" + (input3 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input3 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input3)) +
+                                    " , IN4:" + (input4 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input4 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input4)) +
+                                    " , IN5:" + (input5 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input5 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input5)) +
+                                    " , IN6:" + (input6 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input6 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input6))
                     );
                 }
 
@@ -1191,17 +1181,17 @@ public class Io {
                     debounceIgnition = 0; // freeze the state we are in (needed because of ignition-comingling bug)
                 setVoltageInput(voltage_input);
                 checkEngineStatus();
-                if (input1 != IoService.HW_INPUT_UNKNOWN)
+                if (input1 != IoServiceHardwareWrapper.HW_INPUT_UNKNOWN)
                     checkDigitalInput(1, input1);
-                if (input2 != IoService.HW_INPUT_UNKNOWN)
+                if (input2 != IoServiceHardwareWrapper.HW_INPUT_UNKNOWN)
                     checkDigitalInput(2, input2);
-                if (input3 != IoService.HW_INPUT_UNKNOWN)
+                if (input3 != IoServiceHardwareWrapper.HW_INPUT_UNKNOWN)
                     checkDigitalInput(3, input3);
-                if (input4 != IoService.HW_INPUT_UNKNOWN)
+                if (input4 != IoServiceHardwareWrapper.HW_INPUT_UNKNOWN)
                     checkDigitalInput(4, input4);
-                if (input5 != IoService.HW_INPUT_UNKNOWN)
+                if (input5 != IoServiceHardwareWrapper.HW_INPUT_UNKNOWN)
                     checkDigitalInput(5, input5);
-                if (input6 != IoService.HW_INPUT_UNKNOWN)
+                if (input6 != IoServiceHardwareWrapper.HW_INPUT_UNKNOWN)
                     checkDigitalInput(6, input6);
 
 

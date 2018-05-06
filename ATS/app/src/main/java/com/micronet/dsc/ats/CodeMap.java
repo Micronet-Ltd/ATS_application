@@ -17,8 +17,8 @@ public class CodeMap {
     private static final String MO_FILENAME = "moeventcodes";
 
     // Paths of the files (used for copying from the alternate to the real location)
-    private static final String FILENAME_STANDARD_PATH = "/data/data/" + BuildConfig.APPLICATION_ID + "/shared_prefs";
-    private static final String FILENAME_ALTERNATE_PATH = "/internal_Storage/ATS/";
+    //private static final String FILENAME_STANDARD_PATH = "/data/data/" + BuildConfig.APPLICATION_ID + "/shared_prefs";
+    //private static final String FILENAME_ALTERNATE_PATH = "/internal_Storage/ATS/";
 
 
 
@@ -39,8 +39,8 @@ public class CodeMap {
     /////////////////////////////////////////////////////////////////
     public static int init() {
 
-        boolean mo_copied = Config.copyFile(FILENAME_ALTERNATE_PATH, FILENAME_STANDARD_PATH, MO_FILENAME + ".xml");
-        boolean mt_copied = Config.copyFile(FILENAME_ALTERNATE_PATH, FILENAME_STANDARD_PATH, MT_FILENAME + ".xml");
+        boolean mo_copied = Config.copyFile(Config.FILENAME_ALTERNATE_PATHS, Config.FILENAME_STANDARD_PATH, MO_FILENAME + ".xml");
+        boolean mt_copied = Config.copyFile(Config.FILENAME_ALTERNATE_PATHS, Config.FILENAME_STANDARD_PATH, MT_FILENAME + ".xml");
 
         return (mo_copied  ? EventType.CONFIG_FILE_MOMAP : 0) | (mt_copied ? EventType.CONFIG_FILE_MTMAP : 0);
     }

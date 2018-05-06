@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
             super.onCreate(savedInstanceState);
             finish();
         } else {
-
+/*
             setTheme(R.style.AppTheme);
 
             super.onCreate(savedInstanceState);
@@ -78,7 +78,7 @@ public class MainActivity extends Activity {
 
 
             TextView textSerial = (TextView) findViewById(R.id.textSerial);
-            String serialstr = IoService.getHardwareDeviceId();
+            String serialstr = IoServiceHardwareWrapper.getHardwareDeviceId();
             if (serialstr != null) {
                 textSerial.setText("Serial Number: " + serialstr);
             }
@@ -98,7 +98,7 @@ public class MainActivity extends Activity {
             editVoltage = (EditText) findViewById(R.id.editTextVolts);
 
             if (!Io.DEFAULT_ALWAYS_OVERRIDE) {
-                IoService.HardwareInputResults hardwareInputResults = IoService.getAllHardwareInputs();
+                IoServiceHardwareWrapper.HardwareInputResults hardwareInputResults = HardwareWrapper.getAllHardwareInputs();
 
                 if (hardwareInputResults  != null) {
                     checkBoxIgnition.setChecked(hardwareInputResults.ignition_input);
@@ -243,7 +243,7 @@ public class MainActivity extends Activity {
                     Io.DEFAULT_BATTERY_VOLTS = Double.parseDouble(strVoltage);
                 }
             });
-
+*/
 
         }
 
@@ -351,11 +351,11 @@ public class MainActivity extends Activity {
 
 
     public void showStatus() {
-
+/*
         Log.v(TAG, "showStatus()");
         final List<QueueItem> list =  mService.queue.getAllItems();
 
-        final IoService.HardwareInputResults hardwareInputResults = IoService.getAllHardwareInputs();
+        final IoServiceHardwareWrapper.HardwareInputResults hardwareInputResults = HardwareWrapper.getAllHardwareInputs();
 
 
         MainActivity.this.runOnUiThread(new Runnable() {
@@ -466,6 +466,8 @@ public class MainActivity extends Activity {
                 Log.v(TAG, "showStatus END");
             } //run
         });
+
+*/
     } // showStatus()
 
 
@@ -479,11 +481,11 @@ public class MainActivity extends Activity {
         public void run() {
 
             Log.v(TAG, "updateTask()");
-
+/*
             showStatus();
             if (mBound) // we are still bound
                 mainHandler.postDelayed(updateTask, 1000); // update every second
-
+*/
             Log.v(TAG, "updateTask() END");
         }
     };
