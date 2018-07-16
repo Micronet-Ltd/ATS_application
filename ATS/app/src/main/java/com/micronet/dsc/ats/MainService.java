@@ -633,7 +633,7 @@ public class MainService extends Service {
                 PendingIntent.FLAG_UPDATE_CURRENT);
 
         Notification noti = new Notification.Builder(context)
-                .setContentTitle("A317 Telematics Service")
+                .setContentTitle("ATS")
                 .setContentText("is running")
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentIntent(pendingIntent)
