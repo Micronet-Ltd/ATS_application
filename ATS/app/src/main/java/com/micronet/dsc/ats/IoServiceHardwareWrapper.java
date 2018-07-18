@@ -32,6 +32,7 @@ public class IoServiceHardwareWrapper {
         int input4 = HW_INPUT_UNKNOWN;
         int input5 = HW_INPUT_UNKNOWN;
         int input6 = HW_INPUT_UNKNOWN;
+        int input7 = HW_INPUT_UNKNOWN;
         double voltage;
         long savedTime; // if this is 0, then they are invalid
     }

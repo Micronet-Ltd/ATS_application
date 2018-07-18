@@ -54,6 +54,7 @@ public class Io {
     public static boolean DEFAULT_INPUT4_STATE = false; // default physical state if hardware API not connected (can be changed from activity)
     public static boolean DEFAULT_INPUT5_STATE = false; // default physical state if hardware API not connected (can be changed from activity)
     public static boolean DEFAULT_INPUT6_STATE = false; // default physical state if hardware API not connected (can be changed from activity)
+    public static boolean DEFAULT_INPUT7_STATE = false; // default physical state if hardware API not connected (can be changed from activity)
 
     public static double DEFAULT_BATTERY_VOLTS = 13.4; // default state if hardware API not connected (can be changed from activity)
 
@@ -1081,6 +1082,7 @@ public class Io {
         hir.input4 = intent.getIntExtra("input4", 0);
         hir.input5 = intent.getIntExtra("input5", 0);
         hir.input6 = intent.getIntExtra("input6", 0);
+        hir.input7 = intent.getIntExtra("input7", 0);
         hir.voltage = intent.getDoubleExtra("voltage", 0);
         hir.savedTime = intent.getLongExtra("savedTime", 0);
 
@@ -1121,7 +1123,7 @@ public class Io {
 
                 double voltage_input;
                 boolean ignition_input, ignition_valid;
-                int input1, input2, input3, input4, input5, input6;
+                int input1, input2, input3, input4, input5, input6, input7;
 
                 voltage_input = DEFAULT_BATTERY_VOLTS;
                 ignition_input = DEFAULT_IGNITION_STATE;
@@ -1132,6 +1134,7 @@ public class Io {
                 input4 = (DEFAULT_INPUT4_STATE ? 1 : 0);
                 input5 = (DEFAULT_INPUT5_STATE ? 1 : 0);
                 input6 = (DEFAULT_INPUT6_STATE ? 1 : 0);
+                input7 = (DEFAULT_INPUT7_STATE ? 1 : 0);
                 //lastIoTaskAttemptTime = SystemClock.elapsedRealtime();
                 //ioTaskRunning = true;
 
@@ -1152,6 +1155,8 @@ public class Io {
                         input4 = hardwareInputResults.input4;
                         input5 = hardwareInputResults.input5;
                         input6 = hardwareInputResults.input6;
+                        input7 = hardwareInputResults.input7;
+
                     }
                 }
 
@@ -1168,7 +1173,8 @@ public class Io {
                                     " , IN3:" + (input3 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input3 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input3)) +
                                     " , IN4:" + (input4 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input4 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input4)) +
                                     " , IN5:" + (input5 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input5 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input5)) +
-                                    " , IN6:" + (input6 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input6 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input6))
+                                    " , IN6:" + (input6 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input6 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input6)) +
+                                    " , IN7:" + (input7 == IoServiceHardwareWrapper.HW_INPUT_UNKNOWN ? "?" : (input7 == IoServiceHardwareWrapper.HW_INPUT_FLOAT ? "F" : input7))
                     );
                 }
 
@@ -1193,7 +1199,8 @@ public class Io {
                     checkDigitalInput(5, input5);
                 if (input6 != IoServiceHardwareWrapper.HW_INPUT_UNKNOWN)
                     checkDigitalInput(6, input6);
-
+                if (input7 != IoServiceHardwareWrapper.HW_INPUT_UNKNOWN)
+                    checkDigitalInput(7, input7);
 
                 //watchdog_IoPollTask = true; // successfully completed
             } catch (Exception e) {
