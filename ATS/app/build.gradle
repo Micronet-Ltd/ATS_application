@@ -11,7 +11,7 @@ android {
     defaultConfig {
         applicationId "com.micronet.dsc.ats"
         versionCode 300
-        versionName "3.0.0"
+        versionName "3.1.0"
         setProperty("archivesBaseName", "MicronetATS-v" + versionName )
     }
     buildTypes {
