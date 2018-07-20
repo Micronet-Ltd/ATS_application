@@ -16,8 +16,8 @@ public class IoServiceHardwareWrapper {
     static final int HW_INPUT_UNKNOWN = -2; // could not determine a value for the input
 
     // determine values for reading digital lows and highs on analog lines (anything in between is a float)
-    static final int ANALOG_THRESHOLD_LOW_MV = 1000; // anything below 1 volt is low
-    static final int ANALOG_THRESHOLD_HIGH_MV = 5000; // anything above 5 volt is high
+    static final int ANALOG_THRESHOLD_LOW_MV = 6000; // anything below 6 volt is low
+    static final int ANALOG_THRESHOLD_HIGH_MV = 7000; // anything above 7 volt is high
 
 
     //public static class HardwareVoltageResults {
