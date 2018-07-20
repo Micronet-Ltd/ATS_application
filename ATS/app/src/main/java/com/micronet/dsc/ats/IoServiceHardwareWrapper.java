@@ -16,9 +16,21 @@ public class IoServiceHardwareWrapper {
     static final int HW_INPUT_UNKNOWN = -2; // could not determine a value for the input
 
     // determine values for reading digital lows and highs on analog lines (anything in between is a float)
-    static final int ANALOG_THRESHOLD_LOW_MV = 6000; // anything below 6 volt is low
-    static final int ANALOG_THRESHOLD_HIGH_MV = 7000; // anything above 7 volt is high
+    static int ANALOG_THRESHOLD_LOW_MV; // anything below 6 volt is low
+    static int ANALOG_THRESHOLD_HIGH_MV; // anything above 7 volt is high
 
+
+    static {
+        if(BuildConfig.FLAVOR_DEVICE.equals(MainService.BUILD_FLAVOR_OBC5)) {
+            ANALOG_THRESHOLD_LOW_MV = 6000;
+            ANALOG_THRESHOLD_HIGH_MV = 7000;
+        }
+        else { // A317
+            ANALOG_THRESHOLD_LOW_MV = 1000;
+            ANALOG_THRESHOLD_HIGH_MV = 5000;
+        }
+
+    }
 
     //public static class HardwareVoltageResults {
 
