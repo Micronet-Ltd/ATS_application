@@ -13,7 +13,7 @@ package com.micronet.dsc.vbs;
 import android.content.Context;
 import android.os.Handler;
 
-import com.micronet.canbus.CanbusHardwareFilter;
+
 
 public class VehicleBusDiscovery {
 
@@ -41,7 +41,7 @@ public class VehicleBusDiscovery {
 
     /// Things set by the calling class
     int initial_bitrate = VehicleBusCAN.DEFAULT_BITRATE;
-    CanbusHardwareFilter[] hardwareFilters; // this must be set to something, otherwise no packets will be received and thus bus not discovered
+    VehicleBusWrapper.CANHardwareFilter[] hardwareFilters; // this must be set to something, otherwise no packets will be received and thus bus not discovered
     String BUS_NAME; // the name of the bus we are discovering on, passed to the wrapper
 
 
@@ -76,7 +76,7 @@ public class VehicleBusDiscovery {
     //      call this before starting discovery
     //  hwFilters : determines what qualifies as a successful discovery .. this must be set to something
     ////////////////////////////////////////////////////////
-    public void setCharacteristics(int initial_bitrate, CanbusHardwareFilter[] hwFilters) {
+    public void setCharacteristics(int initial_bitrate, VehicleBusWrapper.CANHardwareFilter[] hwFilters) {
         this.initial_bitrate = initial_bitrate;
         this.hardwareFilters = hwFilters;
     }

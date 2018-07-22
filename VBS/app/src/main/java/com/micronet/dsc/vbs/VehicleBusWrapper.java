@@ -1,7 +1,8 @@
 /////////////////////////////////////////////////////////////
-// VehicleBusCommWrapper:
-//  provides a class that can be extended by J1708 and CAN classes
-//  allows setup of the singleton interfaces and sockets needed for access to canlibrary by CAN and J1708
+// VehicleBusWrapper:
+//  1) Extension: provides extra methods that can are used by both J1708 and CAN sub-classes
+//  2) Resource Sharing: allows setup of the singleton interfaces and sockets needed for joint access to can library by CAN and J1708
+//  3) Normalization: Provides intermediate layer for access to library so no other classes call library methods directly.
 /////////////////////////////////////////////////////////////
 
 package com.micronet.dsc.vbs;
@@ -9,10 +10,10 @@ package com.micronet.dsc.vbs;
 import android.os.Handler;
 import android.os.Looper;
 
-import com.micronet.canbus.CanbusFrameType;
-import com.micronet.canbus.CanbusHardwareFilter;
+
 import com.micronet.canbus.CanbusInterface;
 import com.micronet.canbus.CanbusSocket;
+
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -21,7 +22,7 @@ import java.util.Iterator;
 /**
  * Created by dschmidt on 2/18/16.
  */
-public class VehicleBusWrapper {
+public class VehicleBusWrapper extends VehicleBusHW {
     public static final String TAG = "ATS-VBS-Wrap";
 
 
@@ -37,6 +38,12 @@ public class VehicleBusWrapper {
         }
         return instance;
     }
+
+
+    ///////////////////////////////////////////////////////////
+
+    ///////////////////////////////////////////////////////////
+
 
     // basic handler for posting
     Handler callbackHandler = new Handler(Looper.getMainLooper());
@@ -68,186 +75,6 @@ public class VehicleBusWrapper {
 
 
 
-    ///////////////////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////
-    //
-    // Wrappers for the Canlib function calls
-    //
-    ///////////////////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////
-
-
-    CanbusInterface createInterface(boolean listen_only, int bitrate, CanbusHardwareFilter[] hardwareFilters) {
-
-        CanbusInterface canInterface = null;
-
-        try {
-            canInterface = new CanbusInterface();
-        } catch (Exception e) {
-            Log.e(TAG, "Unable to create new CanbusInterface() " + e.toString());
-            return null;
-        }
-
-	// We must set bitrate and listening mode both before and after creating the interface.
-	// We would prefer to always set before, but that doesn't always work
-
-        try {
-            canInterface.setBitrate(bitrate);
-        } catch (Exception e) {
-            Log.e(TAG, "Unable to set bitrate for CanbusInterface() " + e.toString());
-            return null;
-        }
-
-
-
-        // we must first set listening only mode before creating it as listen-only
-        try {
-            canInterface.setListeningMode(listen_only);
-        } catch (Exception e) {
-            Log.e(TAG, "Unable to set mode for CanbusInterface() " + e.toString());
-            return null;
-        }
-
-        try {
-            canInterface.create(listen_only);
-        } catch (Exception e) {
-            Log.e(TAG, "Unable to call create(" + listen_only + ") for CanbusInterface() " + e.toString());
-            return null;
-        }
-
-
-        try {
-            canInterface.setListeningMode(listen_only);
-        } catch (Exception e) {
-            Log.e(TAG, "Unable to set mode for CanbusInterface() " + e.toString());
-            return null;
-        }
-
-
-        // Set the bitrate again since it doesn't work to set this before creating interface first time after power-up
-        // We are in listen mode, so it shouldn't be a problem to open at wrong bitrate
-        try {
-            canInterface.setBitrate(bitrate);
-        } catch (Exception e) {
-            Log.e(TAG, "Unable to set bitrate for CanbusInterface() " + e.toString());
-            return null;
-        }
-
-
-
-
-        Log.d(TAG, "Interface created @ " + bitrate + "kb " + (listen_only ? "READ-ONLY" : "READ-WRITE"));
-
-        if (hardwareFilters != null) {
-            try {
-                canInterface.setFilters(hardwareFilters);
-            } catch (Exception e) {
-                Log.e(TAG, "Unable to set filters for CanbusInterface() " + e.toString());
-                removeInterface(canInterface);
-                return null;
-            }
-            String filter_str = "";
-            for (CanbusHardwareFilter filter : hardwareFilters) {
-                int[] ids = filter.getIds();
-                filter_str += " (";
-                for (int id : ids) {
-                    filter_str += "x" + String.format("%X", id) + " ";
-                }
-                filter_str += "M:x" + String.format("%X", filter.getMask()) + ")";
-            }
-
-            Log.d(TAG, "Filters = " + filter_str);
-        }
-
-        return canInterface;
-    } // createInterface()
-
-
-    void removeInterface(CanbusInterface canInterface) {
-        try {
-            canInterface.remove();
-        } catch (Exception e) {
-            Log.e(TAG, "Unable to remove CanbusInterface() " + e.toString());
-        }
-    } // removeInterface()
-
-
-
-    CanbusSocket createSocket(CanbusInterface canInterface) {
-
-        CanbusSocket socket = null;
-
-        // open a new socket.
-        try {
-            socket = canInterface.createSocket();
-            if (socket == null) {
-                Log.e(TAG, "Socket not created .. returned NULL");
-                return null;
-            }
-            // set socket options here
-        } catch (Exception e) {
-            Log.e(TAG, "Exception creating Socket: "  + e.toString(), e);
-            return null;
-        }
-        return socket;
-    } // createSocket()
-
-
-    boolean openSocket(CanbusSocket socket, boolean discardBuffer) {
-        try {
-            socket.open();
-        } catch (Exception e) {
-            Log.e(TAG, "Exception opening Socket: " +  e.toString(), e);
-            return false;
-        }
-
-        // we have to discard when opening a socket at a new bitrate, but this causes a 3 second gap in frame reception
-
-        if (discardBuffer) {
-            try {
-                socket.discardInBuffer();
-            } catch (Exception e) {
-                Log.e(TAG, "Exception discarding Socket buffer: " + e.toString(), e);
-                return false;
-            }
-        }
-
-        return true;
-    } // openSocket
-
-
-    void closeSocket(CanbusSocket socket) {
-        // close the socket
-        try {
-            if (socket != null)
-                socket.close();
-            socket = null;
-        } catch (Exception e) {
-            Log.e(TAG, "Exception closeSocket()" + e.toString(), e);
-        }
-    } // closeSocket();
-
-
-
-    //////////////////////////////////////////////////////////////////
-    // isSupported()
-    //  does the hardware support J1708 ?
-    //////////////////////////////////////////////////////////////////
-    public static boolean isJ1708Supported() {
-
-        Log.v(TAG, "Testing isJ1708Supported?");
-        if (!isUnitTesting) {
-            CanbusInterface canInterface = new CanbusInterface();
-            return canInterface.isJ1708Supported();
-        } else {
-            return true;
-        }
-
-    } // isJ1708Supported?
-
-
-
-
 
     ///////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////
@@ -259,12 +86,27 @@ public class VehicleBusWrapper {
     ///////////////////////////////////////////////////////////////////////////////
 
 
+    //////////////////////////////////////////////////////////////////
+    // isJ1708Supported()
+    //  does the hardware support J1708 ?
+    //////////////////////////////////////////////////////////////////
+    public static boolean isJ1708Supported() {
+        Log.v(TAG, "Testing isJ1708Supported?");
+        if (!isUnitTesting) {
+            return VehicleBusHW.isJ1708Supported();
+        } else {
+            return true;
+        }
+
+    }
+
+
 
     //////////////////////////////////////////////////
     // setCharacteristics()
     //  set details for the CAN, call this before starting a CAN bus
     //////////////////////////////////////////////////
-    public boolean setCharacteristics(boolean listen_only, int bitrate, CanbusHardwareFilter[] hwFilters) {
+    public boolean setCharacteristics(boolean listen_only, int bitrate, CANHardwareFilter[] hwFilters) {
 
         // will take effect on the next bus stop/start cycle
         busSetupRunnable.setCharacteristics(listen_only, bitrate, hwFilters);
@@ -475,15 +317,24 @@ public class VehicleBusWrapper {
 
 
     ///////////////////////////////////////////////////
-    // getSocket()
+    // getJ1708Socket()
     //  return the socket that this wrapper created
     ///////////////////////////////////////////////////
-    public CanbusSocket getSocket() {
+    public J1708Socket getJ1708Socket() {
         if (busSetupRunnable == null) return null; // never even created
         if (!busSetupRunnable.isSetup()) return null; // no valid socket
-        return busSetupRunnable.setupSocket;
-    } // getSocket()
+        return new J1708Socket(busSetupRunnable.setupSocket);
+    } // getJ1708Socket()
 
+    ///////////////////////////////////////////////////
+    // getCANSocket()
+    //  return the socket that this wrapper created
+    ///////////////////////////////////////////////////
+    public CANSocket getCANSocket() {
+        if (busSetupRunnable == null) return null; // never even created
+        if (!busSetupRunnable.isSetup()) return null; // no valid socket
+        return new CANSocket(busSetupRunnable.setupSocket);
+    } // getCANSocket()
 
 
     ///////////////////////////////////////////////////
@@ -611,12 +462,12 @@ public class VehicleBusWrapper {
 
         volatile boolean isSocketReady = false;
 
-        CanbusInterface setupInterface;
-        CanbusSocket setupSocket;
+        InterfaceWrapper setupInterface;
+        SocketWrapper setupSocket;
 
         boolean listen_only = true; // default listen_only
         int bitrate = 250000; // default bit rate
-        CanbusHardwareFilter[] hardwareFilters = null;
+        CANHardwareFilter[] hardwareFilters = null;
 
 
         BusSetupRunnable() {
@@ -630,7 +481,7 @@ public class VehicleBusWrapper {
 
 
 
-        public void setCharacteristics(boolean new_listen_only, int new_bitrate, CanbusHardwareFilter[] new_hardwareFilters) {
+        public void setCharacteristics(boolean new_listen_only, int new_bitrate, CANHardwareFilter[] new_hardwareFilters) {
             // these take effect at next Setup()
             listen_only = new_listen_only;
             bitrate = new_bitrate;
@@ -640,12 +491,12 @@ public class VehicleBusWrapper {
 
         void setDefaultFilters() {
             // create default filters to block all CAN packets that arent all 0s
-            hardwareFilters = new CanbusHardwareFilter[2];
+            hardwareFilters = new CANHardwareFilter[2];
 
             int[] ids = new int[1];
             ids[0] = 0;
-            hardwareFilters[0] = new CanbusHardwareFilter(ids, 0x3FFFFFF, CanbusFrameType.EXTENDED);
-            hardwareFilters[1] = new CanbusHardwareFilter(ids, 0x7FF, CanbusFrameType.STANDARD);
+            hardwareFilters[0] = new CANHardwareFilter(ids, 0x3FFFFFF, CANFrameType.EXTENDED);
+            hardwareFilters[1] = new CANHardwareFilter(ids, 0x7FF, CANFrameType.STANDARD);
         }
 
 
@@ -703,11 +554,11 @@ public class VehicleBusWrapper {
 
             //Log.v(TAG, "opening socket");
 
-	    // we want to discard buffer when opening listen-only sockets because this means we
-        //      may be switching bitrates (unless we are only starting J1708, in which case only downside
-        //      is it takes 3 seconds longer than it otherwise would to start getting packets).
+            // we want to discard buffer when opening listen-only sockets because this means we
+            //      may be switching bitrates (unless we are only starting J1708, in which case only downside
+            //      is it takes 3 seconds longer than it otherwise would to start getting packets).
 
-            if (!openSocket(setupSocket, listen_only)) { 
+            if (!openSocket(setupSocket, listen_only)) {
                 removeInterface(setupInterface);
                 isClosed = true;
                 return false;
@@ -747,6 +598,8 @@ public class VehicleBusWrapper {
             callbackNowTerminated();
 
         } // doInternalTeardown()
+
+
 
         //////////////////////////////////////////////////////
         // run()

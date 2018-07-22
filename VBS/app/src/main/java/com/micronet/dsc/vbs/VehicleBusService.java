@@ -17,11 +17,8 @@ import android.os.IBinder;
 import android.os.SystemClock;
 
 
-
-import com.micronet.canbus.CanbusFrameType;
-import com.micronet.canbus.CanbusHardwareFilter;
-
 import java.util.Arrays;
+
 
 public class VehicleBusService extends Service {
 
@@ -65,7 +62,7 @@ public class VehicleBusService extends Service {
 
     @Override
     public void onCreate() {
-        android.util.Log.i(TAG, "Service Created: VBS version " + BuildConfig.VERSION_NAME);
+        android.util.Log.i(TAG, "Service Created: VBS device=" + BuildConfig.BUILD_DEVICE + " version=" + BuildConfig.VERSION_NAME);
         processId = android.os.Process.myPid();
         mainHandler  = new Handler();
     }
@@ -338,7 +335,7 @@ public class VehicleBusService extends Service {
     //      when service receives the "restart" action, then we will load this from file, otherwise we only use what is in memory
     ////////////////////////////////////////////////////////////////
     void startCAN(int bitrate, boolean skip_verify, boolean auto_detect, int[] ids, int masks[], boolean load_last_confirmed) {
-
+        Log.d(TAG, "+startCAN():");
 
         if (hasStartedCAN) {
             Log.w(TAG, "CAN already started. Ignoring subsequent Start.");
@@ -357,7 +354,7 @@ public class VehicleBusService extends Service {
         }
 */
         // create the combined filters
-        CanbusHardwareFilter[] canHardwareFilters = createCombinedFilters(ids, masks);
+        VehicleBusWrapper.CANHardwareFilter[] canHardwareFilters = createCombinedFilters(ids, masks);
 
 
         my_can = new VehicleBusCAN(context, isUnitTesting);
@@ -381,9 +378,14 @@ public class VehicleBusService extends Service {
 
         if (!isAnythingElseOn(VBUS_CAN)) {
             // if we haven't started J1708, we need to start status broadcasts
-            if (mainHandler != null)
+
+            if (mainHandler != null) {
+                Log.d(TAG, "Starting status broadcasts");
                 mainHandler.postDelayed(statusTask, BROADCAST_STATUS_DELAY_MS); // broadcast a status every 1s
+            }
         }
+
+        Log.d(TAG, "-startCAN():");
     } // startCAN()
 
     ////////////////////////////////////////////////////////////////
@@ -497,7 +499,7 @@ public class VehicleBusService extends Service {
     // createCombinedFilters()
     //  take the ids and masks passed to this and combine into CanBusHardwareFilter
     ///////////////////////////////////////////////////////////////
-    CanbusHardwareFilter[] createCombinedFilters(int[] ids, int[] masks) {
+    VehicleBusWrapper.CANHardwareFilter[] createCombinedFilters(int[] ids, int[] masks) {
 
 
         if ((ids == null) || (masks == null) ||
@@ -507,11 +509,11 @@ public class VehicleBusService extends Service {
         }
 
         int count = ids.length;
-        CanbusHardwareFilter[] canHardwareFilters = new CanbusHardwareFilter[count];
+        VehicleBusWrapper.CANHardwareFilter[] canHardwareFilters = new VehicleBusWrapper.CANHardwareFilter[count];
 
         for (int i = 0; i < masks.length && i < ids.length; i++) {
             canHardwareFilters[i] =
-                 new CanbusHardwareFilter(new int[] {ids[i]},masks[i], CanbusFrameType.EXTENDED);
+                 new VehicleBusWrapper.CANHardwareFilter(new int[] {ids[i]},masks[i], VehicleBusWrapper.CANFrameType.EXTENDED);
         }
 
         return canHardwareFilters;
@@ -529,7 +531,9 @@ public class VehicleBusService extends Service {
         Context context = getApplicationContext();
 
         Intent ibroadcast = new Intent();
-        ibroadcast.setPackage(VehicleBusConstants.PACKAGE_NAME_ATS);
+        Log.v(TAG, "Sending Status to " + VehicleBusConstants.PACKAGE_NAME_ATS);
+
+        //ibroadcast.setPackage(VehicleBusConstants.PACKAGE_NAME_ATS);
         ibroadcast.setAction(VehicleBusConstants.BROADCAST_STATUS);
 
 
@@ -571,7 +575,7 @@ public class VehicleBusService extends Service {
                     Thread.sleep(20000);
                 }
 */
-
+                //Log.d(TAG, "statusTask()");
                 broadcastStatus();
                 if (mainHandler != null)
                     mainHandler.postDelayed(statusTask, BROADCAST_STATUS_DELAY_MS); // broadcast a status every 1s
