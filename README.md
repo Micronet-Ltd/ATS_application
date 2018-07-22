@@ -11,5 +11,12 @@ This repository contains 4 projects:
 4 testapps -- apps used for testing devices/bugs or functionality
 
 
-These projects require the correct system signing keys. Rename the a300keys.properties.sample file in the project root directory to a300keys.properties and edit so it contains the correct key information.
+These projects require the correct system signing keys. Different hardware platforms have different keys. Sample files are included for you to copy and edit so they point to the correct keys.
+
+Copy and edit these files in project root directory:
+
+	"a300keys.properties.sample" to "a300keys.properties"
+
+	"obc5keys.properties.sample" to "obc5keys.properties"
+
 
