@@ -17,10 +17,6 @@ import android.content.IntentFilter;
 import android.os.Handler;
 import android.os.SystemClock;
 
-import com.micronet.canbus.CanbusFrame;
-import com.micronet.canbus.CanbusFrameType;
-import com.micronet.canbus.CanbusHardwareFilter;
-import com.micronet.canbus.CanbusSocket;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -42,8 +38,6 @@ public class VehicleBusCAN {
     static CANWriteRunnable canWriteRunnable; // thread for writing
     static CANReadRunnable canReadRunnable; // thread for reading
 
-//    CanbusInterface canInterface = null;
-//    CanbusSocket canSocket = null;
 
     Handler callbackHandler = null; // the handler that the runnable will be posted to
 
@@ -51,8 +45,8 @@ public class VehicleBusCAN {
     Runnable readyTxRunnable = null; // runnable to be posted to handler when the bus is ready for transmit/receive
 
 
-    List<CanbusFrame> incomingList = Collections.synchronizedList(new ArrayList<CanbusFrame>());
-    List<CanbusFrame> outgoingList = Collections.synchronizedList(new ArrayList<CanbusFrame>());
+    List<VehicleBusWrapper.CANFrame> incomingList = Collections.synchronizedList(new ArrayList<VehicleBusWrapper.CANFrame>());
+    List<VehicleBusWrapper.CANFrame> outgoingList = Collections.synchronizedList(new ArrayList<VehicleBusWrapper.CANFrame>());
 
 
     VehicleBusWrapper busWrapper;
@@ -90,7 +84,7 @@ public class VehicleBusCAN {
     //      2) Confirmed (if we previously received frames at this bitrate and haven't switched bitrates or restarted app since)
     //      3) Unconfirmed (all others .. this will start up in listen mode until a frame is received)
     ///////////////////////////////////////////////////////
-    public boolean start(int initial_bitrate, boolean auto_detect, CanbusHardwareFilter[] hardwareFilters) {
+    public boolean start(int initial_bitrate, boolean auto_detect, VehicleBusWrapper.CANHardwareFilter[] hardwareFilters) {
 
 
         Log.v(TAG, "start() @ " + initial_bitrate + "kb " +
@@ -244,13 +238,17 @@ public class VehicleBusCAN {
     ///////////////////////////////////////////////////////////
     boolean startReading() {
 
-        if (busWrapper.getSocket() == null) return false;
+        VehicleBusWrapper.CANSocket canSocket = null;
+
+        canSocket = busWrapper.getCANSocket();
+
+        if (canSocket == null) return false;
 
         // Safety: make sure we cancel any previous thread if we are starting a new one
         if (canReadRunnable != null)
             canReadRunnable.cancelThread = true;
 
-        canReadRunnable = new CANReadRunnable(busWrapper.getSocket());
+        canReadRunnable = new CANReadRunnable(canSocket);
 
         // If we aren't unit testing, then start the thread
         if (!busWrapper.isUnitTesting) {
@@ -268,13 +266,17 @@ public class VehicleBusCAN {
     ///////////////////////////////////////////////////////////
     boolean startWriting() {
 
-        if (busWrapper.getSocket() == null) return false;
+        VehicleBusWrapper.CANSocket canSocket = null;
+
+        canSocket = busWrapper.getCANSocket();
+
+        if ( canSocket == null) return false;
 
         // Safety: make sure we cancel any previous thread if we are starting a new one
         if (canWriteRunnable != null)
             canWriteRunnable.cancelThread = true;
 
-        canWriteRunnable = new CANWriteRunnable(busWrapper.getSocket());
+        canWriteRunnable = new CANWriteRunnable(canSocket);
 
         // If we aren't unit testing, then start the thread
         if (!busWrapper.isUnitTesting) {
@@ -406,7 +408,7 @@ public class VehicleBusCAN {
     ///////////////////////////////////////////////////////////////////
     // receiveFrame() : called by CAN thread when something is received
     ///////////////////////////////////////////////////////////////////
-    void receiveFrame(CanbusFrame frame) {
+    void receiveFrame(VehicleBusWrapper.CANFrame frame) {
 
 
         // Are we unconfirmed ?
@@ -439,7 +441,7 @@ public class VehicleBusCAN {
     // sendFrame() : safe to call from a different thread than the CAN threads
     //  queues a frame to be sent by the write thread
     ///////////////////////////////////////////////////////////////////
-    void sendFrame(CanbusFrame frame) {
+    void sendFrame(VehicleBusWrapper.CANFrame frame) {
 
         Log.vv(TAG, "SendFrame()");
         synchronized (outgoingList) {
@@ -482,16 +484,16 @@ public class VehicleBusCAN {
         volatile boolean isClosed = false;
         volatile boolean isReady = false;
         //CanbusInterface canInterface;
-        CanbusSocket canWriteSocket;
+        VehicleBusWrapper.CANSocket canWriteSocket;
 
-        CANWriteRunnable(CanbusSocket socket) {
+        CANWriteRunnable(VehicleBusWrapper.CANSocket socket) {
 //                CanbusInterface new_canInterface) {
             canWriteSocket = socket;
         }
 
         public void run() {
 
-            CanbusFrame outFrame = null;
+            VehicleBusWrapper.CANFrame outFrame = null;
 
             while (!cancelThread) {
 
@@ -561,9 +563,9 @@ public class VehicleBusCAN {
         volatile boolean isReady = false;
 
         //CanbusInterface canInterface;
-        CanbusSocket canReadSocket;
+        VehicleBusWrapper.CANSocket canReadSocket;
 
-        CANReadRunnable(CanbusSocket new_canSocket) {
+        CANReadRunnable(VehicleBusWrapper.CANSocket new_canSocket) {
 //            CanbusInterface new_canInterface) {
             //canInterface = new_canInterface;
             canReadSocket = new_canSocket;
@@ -580,7 +582,7 @@ public class VehicleBusCAN {
                 }
 
 
-                CanbusFrame inFrame = null;
+                VehicleBusWrapper.CANFrame inFrame = null;
 
 
                 if (!cancelThread) {
@@ -637,7 +639,7 @@ public class VehicleBusCAN {
     // broadcastRx()
     //  send a local broadcast that we received a CAN frame from the bus
     ///////////////////////////////////////////////
-    void broadcastRx(CanbusFrame frame) {
+    void broadcastRx(VehicleBusWrapper.CANFrame frame) {
 
 
 
@@ -654,7 +656,7 @@ public class VehicleBusCAN {
         long elapsedRealtime = SystemClock.elapsedRealtime(); // ms since boot
 
         Intent ibroadcast = new Intent();
-        ibroadcast.setPackage(VehicleBusConstants.PACKAGE_NAME_ATS);
+        //ibroadcast.setPackage(VehicleBusConstants.PACKAGE_NAME_ATS);
         ibroadcast.setAction(VehicleBusConstants.BROADCAST_CAN_RX);
 
 
@@ -692,7 +694,7 @@ public class VehicleBusCAN {
                 byte[] data = intent.getByteArrayExtra(VehicleBusConstants.BROADCAST_EXTRA_CAN_DATA);
 
                 if ((id != -1) && (data != null) && (data.length > 0)) {
-                    CanbusFrame frame = new CanbusFrame(id, data, CanbusFrameType.EXTENDED);
+                    VehicleBusWrapper.CANFrame frame = new VehicleBusWrapper.CANFrame(id, data, VehicleBusWrapper.CANFrameType.EXTENDED);
                     sendFrame(frame);
                 }
             } catch (Exception e) {

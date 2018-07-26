@@ -1631,8 +1631,8 @@ public class J1939 extends EngineBus {
                     }
 
                     dtc = parseTroubleCode(data, i);
-                    dtc.source_address = source_address; // remember who send this DTC
                     if (dtc != null) {
+                        dtc.source_address = source_address; // remember who send this DTC
                         addDtc(dtc); // add the DTC to a temp list
                     } else {
                         // not a valid code, this indicates the end of the list.

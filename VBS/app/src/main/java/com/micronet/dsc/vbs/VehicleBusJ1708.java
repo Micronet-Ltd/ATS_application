@@ -13,12 +13,6 @@ import android.content.IntentFilter;
 import android.os.Handler;
 import android.os.SystemClock;
 
-import com.micronet.canbus.CanbusFrame;
-import com.micronet.canbus.CanbusFrameType;
-import com.micronet.canbus.J1708Frame;
-import com.micronet.canbus.CanbusHardwareFilter;
-import com.micronet.canbus.CanbusInterface;
-import com.micronet.canbus.CanbusSocket;
 
 import java.security.KeyStore;
 import java.util.ArrayList;
@@ -36,8 +30,6 @@ public class VehicleBusJ1708 {
     static J1708WriteRunnable j1708WriteRunnable; // current thread for writing
     static J1708ReadRunnable j1708ReadRunnable; // current thread for reading
 
-//    CanbusInterface j1708Interface = null;
-//    CanbusSocket j1708Socket = null;
 
     Handler callbackHandler = null; // the handler that the runnable will be posted to
     Runnable receiveRunnable = null; // runnable to be posted to handler when a frame is received
@@ -45,8 +37,8 @@ public class VehicleBusJ1708 {
     Runnable readyTxRunnable = null; // runnable to be posted to handler when the bus is ready for transmit
 
 
-    List<J1708Frame> incomingList = Collections.synchronizedList(new ArrayList<J1708Frame>());
-    List<J1708Frame> outgoingList = Collections.synchronizedList(new ArrayList<J1708Frame>());
+    List<VehicleBusWrapper.J1708Frame> incomingList = Collections.synchronizedList(new ArrayList<VehicleBusWrapper.J1708Frame>());
+    List<VehicleBusWrapper.J1708Frame> outgoingList = Collections.synchronizedList(new ArrayList<VehicleBusWrapper.J1708Frame>());
 
     VehicleBusWrapper busWrapper;
 
@@ -72,12 +64,12 @@ public class VehicleBusJ1708 {
     // receiveFrame() : safe to call from a different Thread than the CAN threads
     // returns null if there are no frames to receive
     ///////////////////////////////////////////////////////////////////
-    public J1708Frame receiveFrame() {
+    public VehicleBusWrapper.J1708Frame receiveFrame() {
 
         synchronized (incomingList) {
             if (incomingList.size() == 0) return null; // nothing in the list
 
-            J1708Frame frame = incomingList.get(0);
+            VehicleBusWrapper.J1708Frame frame = incomingList.get(0);
             incomingList.remove(0);
             return frame ;
         }
@@ -87,7 +79,7 @@ public class VehicleBusJ1708 {
     ///////////////////////////////////////////////////////////////////
     // sendFrame() : safe to callfrom a different Thread than the CAN threads
     ///////////////////////////////////////////////////////////////////
-    public void sendFrame(J1708Frame frame) {
+    public void sendFrame(VehicleBusWrapper.J1708Frame frame) {
 
         Log.vv(TAG, "SendFrame()");
         synchronized (outgoingList ) {
@@ -235,7 +227,11 @@ public class VehicleBusJ1708 {
     ///////////////////////////////////////////////////////////
     public boolean startReading() {
 
-        if (busWrapper.getSocket() == null) return false;
+        VehicleBusWrapper.J1708Socket j1708Socket = null;
+
+        j1708Socket =busWrapper.getJ1708Socket();
+
+        if ( j1708Socket == null) return false;
 
         // Safety: make sure we cancel any previous thread if we are starting a new one
         if (j1708ReadRunnable != null) {
@@ -247,7 +243,7 @@ public class VehicleBusJ1708 {
 
 
         //Log.v(TAG, "creating j708 read thread");
-        j1708ReadRunnable = new J1708ReadRunnable(busWrapper.getSocket());
+        j1708ReadRunnable = new J1708ReadRunnable(j1708Socket);
 
         // If we aren't unit testing, then start the thread
         if (!busWrapper.isUnitTesting) {
@@ -270,7 +266,11 @@ public class VehicleBusJ1708 {
     ///////////////////////////////////////////////////////////
     public boolean startWriting() {
 
-        if (busWrapper.getSocket() == null) return false;
+        VehicleBusWrapper.J1708Socket j1708Socket = null;
+
+        j1708Socket = busWrapper.getJ1708Socket();
+
+        if (j1708Socket == null) return false;
 
         // Safety: make sure we cancel any previous thread if we are starting a new one
         if (j1708WriteRunnable != null) {
@@ -279,7 +279,7 @@ public class VehicleBusJ1708 {
         }
 
         //Log.v(TAG, "creating j708 write thread");
-        j1708WriteRunnable = new J1708WriteRunnable(busWrapper.getSocket());
+        j1708WriteRunnable = new J1708WriteRunnable(j1708Socket);
 
         // If we aren't unit testing, then start the thread
         if (!busWrapper.isUnitTesting) {
@@ -348,16 +348,16 @@ public class VehicleBusJ1708 {
         volatile boolean isClosed = false;
         volatile boolean isReady = false;
 
-        CanbusSocket j1708WriteSocket;
+        VehicleBusWrapper.J1708Socket j1708WriteSocket;
 
-        J1708WriteRunnable(CanbusSocket socket) {
+        J1708WriteRunnable(VehicleBusWrapper.J1708Socket socket) {
 
             j1708WriteSocket = socket;
         }
 
         public void run() {
 
-            J1708Frame outFrame = null;
+            VehicleBusWrapper.J1708Frame outFrame = null;
 
             while (!cancelThread) {
 
@@ -426,9 +426,9 @@ public class VehicleBusJ1708 {
         volatile boolean isClosed = false;
         volatile boolean isReady = false;
 
-        CanbusSocket j1708ReadSocket;
+        VehicleBusWrapper.J1708Socket j1708ReadSocket;
 
-        J1708ReadRunnable(CanbusSocket socket) {
+        J1708ReadRunnable(VehicleBusWrapper.J1708Socket socket) {
 
             j1708ReadSocket = socket;
         }
@@ -444,7 +444,7 @@ public class VehicleBusJ1708 {
                 }
 
 
-                J1708Frame inFrame = null;
+                VehicleBusWrapper.J1708Frame inFrame = null;
 
                 if (!cancelThread) {
                     // Notify the main thread that we are ready for read
@@ -497,7 +497,7 @@ public class VehicleBusJ1708 {
 
 
 
-    void broadcastRx(J1708Frame frame) {
+    void broadcastRx(VehicleBusWrapper.J1708Frame frame) {
 
 
         //synchronized (incomingList) {
@@ -513,7 +513,7 @@ public class VehicleBusJ1708 {
         long elapsedRealtime = SystemClock.elapsedRealtime(); // ms since boot
 
         Intent ibroadcast = new Intent();
-        ibroadcast.setPackage(VehicleBusConstants.PACKAGE_NAME_ATS);
+        //ibroadcast.setPackage(VehicleBusConstants.PACKAGE_NAME_ATS);
         ibroadcast.setAction(VehicleBusConstants.BROADCAST_J1708_RX);
 
         ibroadcast.putExtra(VehicleBusConstants.BROADCAST_EXTRA_TIMESTAMP, elapsedRealtime); // ms since boot
@@ -546,7 +546,7 @@ public class VehicleBusJ1708 {
                 byte[] data = intent.getByteArrayExtra(VehicleBusConstants.BROADCAST_EXTRA_J1708_DATA);
 
                 if ((priority != -1) && (id != -1) && (data != null) && (data.length > 0)) {
-                    J1708Frame frame = new J1708Frame(priority, id, data);
+                    VehicleBusWrapper.J1708Frame frame = new VehicleBusWrapper.J1708Frame(priority, id, data);
                     sendFrame(frame);
                 }
             } catch (Exception e) {
