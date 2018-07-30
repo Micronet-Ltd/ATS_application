@@ -139,7 +139,8 @@ public class HardwareWrapper extends IoServiceHardwareWrapper {
             hardwareInputResults.input5 = IoServiceHardwareWrapper.HW_INPUT_UNKNOWN;
         if (hardwareInputResults.input6 == 0)
             hardwareInputResults.input6 = IoServiceHardwareWrapper.HW_INPUT_UNKNOWN;
-
+        if (hardwareInputResults.input7 == 0)
+            hardwareInputResults.input7 = IoServiceHardwareWrapper.HW_INPUT_UNKNOWN;
     }
 
 
@@ -242,12 +243,12 @@ public class HardwareWrapper extends IoServiceHardwareWrapper {
                     // kADC_GPIO_IN3 cannot distinguish between ground and high, just float and not-float
 
                     // input3
-                    inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN4];
+                    inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN3];
                     if (inputVal == -1) {
-                        Log.w(TAG, "reading Input3 (kADC_GPIO_IN4) returned error (-1), trying again");
-                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN4);
+                        Log.w(TAG, "reading Input3 (kADC_GPIO_IN3) returned error (-1), trying again");
+                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN3);
                         if (inputVal == -1) {
-                            Log.e(TAG, "reading Input3 (kADC_GPIO_IN4) returned error (-1) on retry, aborting read");
+                            Log.e(TAG, "reading Input3 (kADC_GPIO_IN3) returned error (-1) on retry, aborting read");
                         }
                     }
                     if (inputVal != -1) {
@@ -262,12 +263,12 @@ public class HardwareWrapper extends IoServiceHardwareWrapper {
 
 
                     // input4
-                    inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN5];
+                    inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN4];
                     if (inputVal == -1) {
-                        Log.w(TAG, "reading Input4 (kADC_GPIO_IN5) returned error (-1), trying again");
-                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN5);
+                        Log.w(TAG, "reading Input4 (kADC_GPIO_IN4) returned error (-1), trying again");
+                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN4);
                         if (inputVal == -1) {
-                            Log.e(TAG, "reading Input4 (kADC_GPIO_IN5) returned error (-1) on retry, aborting read");
+                            Log.e(TAG, "reading Input4 (kADC_GPIO_IN4) returned error (-1) on retry, aborting read");
                         }
                     }
                     if (inputVal != -1) {
@@ -281,12 +282,12 @@ public class HardwareWrapper extends IoServiceHardwareWrapper {
                     }
 
                     // input 5
-                    inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN6];
+                    inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN5];
                     if (inputVal == -1) {
-                        Log.w(TAG, "reading Input5 (kADC_GPIO_IN6) returned error (-1), trying again");
-                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN6);
+                        Log.w(TAG, "reading Input5 (kADC_GPIO_IN5) returned error (-1), trying again");
+                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN5);
                         if (inputVal == -1) {
-                            Log.e(TAG, "reading Input5 (kADC_GPIO_IN6) returned error (-1) on retry, aborting read");
+                            Log.e(TAG, "reading Input5 (kADC_GPIO_IN5) returned error (-1) on retry, aborting read");
                         }
                     }
                     if (inputVal != -1) {
@@ -300,12 +301,12 @@ public class HardwareWrapper extends IoServiceHardwareWrapper {
                     }
 
                     // input 6
-                    inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN7];
+                    inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN6];
                     if (inputVal == -1) {
-                        Log.w(TAG, "reading Input6 (kADC_GPIO_IN7) returned error (-1), trying again");
-                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN7);
+                        Log.w(TAG, "reading Input6 (kADC_GPIO_IN6) returned error (-1), trying again");
+                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN6);
                         if (inputVal == -1) {
-                            Log.e(TAG, "reading Input6 (kADC_GPIO_IN7) returned error (-1) on retry, aborting read");
+                            Log.e(TAG, "reading Input6 (kADC_GPIO_IN6) returned error (-1) on retry, aborting read");
                         }
                     }
                     if (inputVal != -1) {
@@ -315,6 +316,25 @@ public class HardwareWrapper extends IoServiceHardwareWrapper {
                             hardwareInputResults.input6 = 1;
                         else {
                             hardwareInputResults.input6 = HW_INPUT_FLOAT;
+                        }
+                    }
+
+                    // input 7
+                    inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN7];
+                    if (inputVal == -1) {
+                        Log.w(TAG, "reading Input7 (kADC_GPIO_IN7) returned error (-1), trying again");
+                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN7);
+                        if (inputVal == -1) {
+                            Log.e(TAG, "reading Input7 (kADC_GPIO_IN7) returned error (-1) on retry, aborting read");
+                        }
+                    }
+                    if (inputVal != -1) {
+                        // we got a value
+                        if (inputVal < ANALOG_THRESHOLD_LOW_MV) hardwareInputResults.input7 = 0;
+                        else if (inputVal > ANALOG_THRESHOLD_HIGH_MV)
+                            hardwareInputResults.input7 = 1;
+                        else {
+                            hardwareInputResults.input7 = HW_INPUT_FLOAT;
                         }
                     }
 

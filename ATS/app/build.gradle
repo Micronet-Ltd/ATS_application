@@ -10,8 +10,8 @@ android {
     //buildToolsVersion '25.0.0'
     defaultConfig {
         applicationId "com.micronet.dsc.ats"
-        versionCode 301
-        versionName "3.0.1"
+        versionCode 310
+        versionName "3.1.0"
         setProperty("archivesBaseName", "MicronetATS-v" + versionName )
     }
     buildTypes {

@@ -49,7 +49,6 @@
             android:exported="false" >
         </service>
 
-
         <receiver
             android:name=".AlarmReceiver"
             android:enabled="true" >

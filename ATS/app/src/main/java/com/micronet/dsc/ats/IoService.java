@@ -343,6 +343,7 @@ public class IoService extends Service {
         ibroadcast.putExtra("input4", hir.input4);
         ibroadcast.putExtra("input5", hir.input5);
         ibroadcast.putExtra("input6", hir.input6);
+        ibroadcast.putExtra("input7", hir.input7);
         ibroadcast.putExtra("voltage", hir.voltage);
         ibroadcast.putExtra("savedTime", hir.savedTime);
 
