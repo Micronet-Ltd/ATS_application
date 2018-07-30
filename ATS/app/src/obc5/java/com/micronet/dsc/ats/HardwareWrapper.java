@@ -265,10 +265,10 @@ public class HardwareWrapper extends IoServiceHardwareWrapper {
                     // input4
                     inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN4];
                     if (inputVal == -1) {
-                        Log.w(TAG, "reading Input4 (kADC_GPIO_IN5) returned error (-1), trying again");
+                        Log.w(TAG, "reading Input4 (kADC_GPIO_IN4) returned error (-1), trying again");
                         inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN4);
                         if (inputVal == -1) {
-                            Log.e(TAG, "reading Input4 (kADC_GPIO_IN5) returned error (-1) on retry, aborting read");
+                            Log.e(TAG, "reading Input4 (kADC_GPIO_IN4) returned error (-1) on retry, aborting read");
                         }
                     }
                     if (inputVal != -1) {
@@ -300,7 +300,7 @@ public class HardwareWrapper extends IoServiceHardwareWrapper {
                         }
                     }
 
-                    // input 5
+                    // input 6
                     inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN6];
                     if (inputVal == -1) {
                         Log.w(TAG, "reading Input6 (kADC_GPIO_IN6) returned error (-1), trying again");
