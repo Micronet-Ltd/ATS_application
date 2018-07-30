@@ -284,8 +284,8 @@ public class HardwareWrapper extends IoServiceHardwareWrapper {
                     // input 5
                     inputVal = allanalogs[MicronetHardware.kADC_GPIO_IN5];
                     if (inputVal == -1) {
-                        Log.w(TAG, "reading Input5 (kADC_GPIO_IN6) returned error (-1), trying again");
-                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN6);
+                        Log.w(TAG, "reading Input5 (kADC_GPIO_IN5) returned error (-1), trying again");
+                        inputVal = HardwareWrapper.getAnalogInput(MicronetHardware.kADC_GPIO_IN5);
                         if (inputVal == -1) {
                             Log.e(TAG, "reading Input5 (kADC_GPIO_IN5) returned error (-1) on retry, aborting read");
                         }
