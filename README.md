@@ -19,5 +19,6 @@ Copy and edit these files in project root directory:
 
 	"obc5keys.properties.sample" to "obc5keys.properties"
 
+The configuration.xml file goes to `/internal_Storage/ATS` for the A-317 and `/storage/sdcard0/ATS` for the OBC5. 
 
 Documentation can be found [here](https://micronet1023744.sharepoint.com/RD/Forms/AllItems.aspx?viewpath=%2FRD%2FForms%2FAllItems%2Easpx&id=%2FRD%2FATS).
