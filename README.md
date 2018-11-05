@@ -21,4 +21,4 @@ Copy and edit these files in project root directory:
 
 The configuration.xml file goes to `/internal_Storage/ATS` for the A-317 and `/storage/sdcard0/ATS` for the OBC5. 
 
-Documentation can be found [here](https://micronet1023744.sharepoint.com/RD/Forms/AllItems.aspx?viewpath=%2FRD%2FForms%2FAllItems%2Easpx&id=%2FRD%2FATS).
+Documentation can be found [here](https://www.dropbox.com/home/Micronet%20Customers%20Private%20Folders/ATS).
