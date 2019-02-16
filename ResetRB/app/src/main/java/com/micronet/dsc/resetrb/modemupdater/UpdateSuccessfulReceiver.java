@@ -1,8 +1,11 @@
 package com.micronet.dsc.resetrb.modemupdater;
 
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.SHARED_PREF_FILE_KEY;
+
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.util.Log;
 import java.io.BufferedReader;
 import java.io.File;
@@ -43,8 +46,9 @@ public class UpdateSuccessfulReceiver extends BroadcastReceiver {
                         Log.i(TAG, "Pincode doesn't exist.");
                     }
 
-                    // Set sharedpreference so that resetrb doesn't have to check if the modem was already updated
-                    // TODO: Update sharedpreference so resetrb doesn't have to check modem firmware version everytime.
+                    // Update shared preferences
+                    SharedPreferences sharedPref = context.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+                    sharedPref.edit().putBoolean("ModemUpdatedAndDeviceCleaned", true).apply();
 
                     Log.i(TAG, "Clean up device after successful modem firmware update.");
                 } catch (IOException e) {

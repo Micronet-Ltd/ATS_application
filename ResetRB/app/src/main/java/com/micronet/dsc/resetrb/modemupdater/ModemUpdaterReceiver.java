@@ -1,8 +1,11 @@
 package com.micronet.dsc.resetrb.modemupdater;
 
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.SHARED_PREF_FILE_KEY;
+
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.util.Log;
 
 public class ModemUpdaterReceiver extends BroadcastReceiver {
@@ -12,20 +15,26 @@ public class ModemUpdaterReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         Log.i(TAG, "Broadcast received in ResetRB Modem Updater receiver. Action: " + intent.getAction());
 
-        if(intent.getAction() != null) {
-            if(intent.getAction().equalsIgnoreCase(Intent.ACTION_BOOT_COMPLETED)){
-                // Boot Completed Intent
-                // Start Communitake and Modem Updater
-                startModemUpdaterService(context, intent);
-            }else if(intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_REPLACED)){
-                if(intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.dsc.resetrb")){
-                    // New version of ResetRB installed
+        // Check shared preferences
+        SharedPreferences sharedPref = context.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+        boolean updatedAndCleaned = sharedPref.getBoolean("ModemUpdatedAndDeviceCleaned", false);
+
+        if(!updatedAndCleaned){
+            if(intent.getAction() != null) {
+                if(intent.getAction().equalsIgnoreCase(Intent.ACTION_BOOT_COMPLETED)){
+                    // Boot Completed Intent
+                    // Start Communitake and Modem Updater
                     startModemUpdaterService(context, intent);
-                }
-            }else if(intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_ADDED)) {
-                if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.a317modemupdater")) {
-                    // LTE Modem Updater just installed
-                    startModemUpdaterService(context, intent);
+                }else if(intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_REPLACED)){
+                    if(intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.dsc.resetrb")){
+                        // New version of ResetRB installed
+                        startModemUpdaterService(context, intent);
+                    }
+                }else if(intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_ADDED)) {
+                    if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.a317modemupdater")) {
+                        // LTE Modem Updater just installed
+                        startModemUpdaterService(context, intent);
+                    }
                 }
             }
         }
