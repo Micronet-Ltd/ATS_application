@@ -80,9 +80,12 @@ public class ModemUpdaterService extends IntentService {
                 if(isAppInstalled(this, MODEM_APP_NAME)){
                     // Maybe logs haven't been uploaded yet
                     // TODO: Should we start the updater under the assumption that it is going to keep trying to upload the logs? Probably.
-                    Log.i(TAG, "No modem firmware update needed.");
+                    Log.i(TAG, "No modem firmware update needed but LTE Modem Updater is installed. Starting Modem Updater.");
+                    startModemUpdater();
                 }else{
                     Log.i(TAG, "Modem firmware already updated.");
+                    // TODO: Remove this line below. Only adding for testing purposes.
+                    startCommunitake();
                 }
             }
         }

@@ -2,6 +2,7 @@ package com.micronet.dsc.resetrb.modemupdater;
 
 import static com.micronet.dsc.resetrb.modemupdater.Rild.startRild;
 
+import android.support.annotation.Keep;
 import android.util.Log;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -18,6 +19,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+@Keep
 class Port {
 
     private static final String TAG = "Updater-Port";
@@ -26,6 +28,8 @@ class Port {
 
     private BufferedInputStream inputStream;
     private BufferedOutputStream outputStream;
+
+    @Keep
     private FileDescriptor mFd;
 
     private byte[] readBytes;

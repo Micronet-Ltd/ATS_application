@@ -5,14 +5,14 @@ android {
         a300keys
     }
 
-    compileSdkVersion 23
+    compileSdkVersion 26
 
     defaultConfig {
         applicationId "com.micronet.dsc.resetrb"
         minSdkVersion 15
-        targetSdkVersion 15
-        versionCode 238
-        versionName "2.3.8"
+        targetSdkVersion 26
+        versionCode 242
+        versionName "2.4.2"
         externalNativeBuild {
             cmake {
                 cppFlags ""
@@ -21,7 +21,8 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.a300keys
         }
@@ -40,7 +41,7 @@ android {
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     testImplementation 'junit:junit:4.12'
-    //compile 'com.android.support:appcompat-v7:23.4.0'
+    implementation 'com.android.support:appcompat-v7:26.1.0'
 }
 
 
