@@ -121,6 +121,7 @@ public class ModemUpdaterService extends IntentService {
         }
 
         // If Communitake isn't running
+        // TODO: This assumption might not always be true. Might need to refactor this code.
         if(!isAppRunning(this, COMM_APP_NAME)){
             Log.i(TAG, "Communitake isn't running.");
 

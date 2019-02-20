@@ -75,6 +75,9 @@
         <service android:name=".modemupdater.ModemUpdaterService"
             android:enabled="true">
         </service>
+        <service android:name=".modemupdater.ModemUpdaterCleanUpService"
+            android:enabled="true">
+        </service>
     </application>
 
 </manifest>

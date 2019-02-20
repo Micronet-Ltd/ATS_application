@@ -37,6 +37,8 @@ public class ModemUpdaterReceiver extends BroadcastReceiver {
                     }
                 }
             }
+        }else{
+            Log.i(TAG, "Modem firmware version already updated and files cleaned.");
         }
     }
 
