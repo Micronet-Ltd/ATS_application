@@ -202,6 +202,7 @@ class Port {
     void skipAvailable(int timeout) {
         long start = System.currentTimeMillis();
         try {
+            // TODO: Change to other method for skipping
             while (System.currentTimeMillis() - start < timeout) {
                 int available = inputStream.available();
                 if (available > 0) {

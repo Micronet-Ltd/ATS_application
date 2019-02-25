@@ -39,12 +39,16 @@ public class ModemUpdaterService extends IntentService {
         if(intent != null && intent.getAction() != null){
             // Check modem firmware version to see if an update is needed.
             // Try to get good result up to 6 times (AKA no errors when checking)
-            int result = -1;
-            for(int i = 0; i < 6; i++){
-                result = isModemFirmwareUpdateNeededThroughPort();
 
-                if(result != -1){
-                    break;
+            // Check shared preferences
+            int result = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE).getInt("ModemFirmwareUpdateNeeded", -1);
+            if(result == -1){
+                for(int i = 0; i < 6; i++){
+                    result = isModemFirmwareUpdateNeededThroughPort();
+
+                    if(result != -1){
+                        break;
+                    }
                 }
             }
 
@@ -122,11 +126,12 @@ public class ModemUpdaterService extends IntentService {
 
         // If Communitake isn't running
         // TODO: This assumption might not always be true. Might need to refactor this code.
-        if(!isAppRunning(this, COMM_APP_NAME)){
+//        if(!isAppRunning(this, COMM_APP_NAME)){
             Log.i(TAG, "Communitake isn't running.");
 
             try {
                 // If pincode isn't in place, then put it in place
+                // TODO: Different pincode file could exist
                 File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
                 if(!pincodeFile.exists()){
                     FileWriter fileWriter = new FileWriter(pincodeFile);
@@ -153,9 +158,9 @@ public class ModemUpdaterService extends IntentService {
             } catch (IOException e) {
                 Log.e(TAG, e.toString());
             }
-        }else{
-            Log.d(TAG, "Communitake is already running.");
-        }
+//        }else{
+//            Log.d(TAG, "Communitake is already running.");
+//        }
     }
 
     private static boolean isAppRunning(final Context context, final String appName) {
@@ -213,6 +218,7 @@ public class ModemUpdaterService extends IntentService {
 
     // Return -1 on error, return 0 on no update needed, and return 1 on updated needed.
     private int isModemFirmwareUpdateNeededThroughPort(){
+        // TODO: Issues with this function when it fails. Stops/starts rild too much. Should limit it.
         // Try to stop rild to communicate with the modem
         if (!stopRild()) {
             Log.e(TAG, "Error killing rild. Could not properly update modem firmware.");
@@ -247,17 +253,32 @@ public class ModemUpdaterService extends IntentService {
                 // Return update needed
                 port.closePort();
                 startRild();
+
+                // Update shared preferences
+                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+                sharedPref.edit().putInt("ModemFirmwareUpdateNeeded", 1).apply();
+
                 return 1;
             }else{
                 // Return no update needed
                 port.closePort();
                 startRild();
+
+                // Update shared preferences
+                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+                sharedPref.edit().putInt("ModemFirmwareUpdateNeeded", 0).apply();
+
                 return 0;
             }
         } else {
             // Return error
             port.closePort();
             startRild();
+
+            // Update shared preferences
+            SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+            sharedPref.edit().putInt("ModemFirmwareUpdateNeeded", -1).apply();
+
             return -1;
         }
     }

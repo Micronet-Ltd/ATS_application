@@ -41,7 +41,7 @@ public class ModemUpdaterCleanUpService extends IntentService {
                 try {
                     // Force stop communitake, clear communitake, and uninstall updater.
                     // Not sure if we need to force stop communitake or not.
-                    //runShellCommand(new String[]{"am", "force-stop", "com.communitake.mdc.micronet"});
+                    runShellCommand(new String[]{"am", "force-stop", "com.communitake.mdc.micronet"});
                     runShellCommand(new String[]{"pm", "clear", "com.communitake.mdc.micronet"});
                     runShellCommand(new String[]{"pm", "uninstall", "com.micronet.a317modemupdater"});
 
