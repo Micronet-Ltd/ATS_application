@@ -78,8 +78,6 @@ class Port {
     boolean setupPort() {
         if (!port.exists()) {
             Log.e(TAG, "Port does not exist. Could not properly update modem firmware. Restarting rild.");
-
-            startRild();
             return false;
         }
 
@@ -88,7 +86,6 @@ class Port {
             mFd = open("/dev/ttyACM0", 9600);
             if (mFd == null) {
                 Log.e(TAG, "Could not open the port properly for updating modem firmware. Restarting rild.");
-                startRild();
                 return false;
             }
             close();
@@ -200,19 +197,27 @@ class Port {
     }
 
     void skipAvailable(int timeout) {
-        long start = System.currentTimeMillis();
         try {
-            // TODO: Change to other method for skipping
-            while (System.currentTimeMillis() - start < timeout) {
-                int available = inputStream.available();
-                if (available > 0) {
-                    long skipped = inputStream.skip(available);
-                    Log.i(TAG, String.format("Skipped %d bytes", skipped));
+            Callable<Void> readTask = new Callable<Void>() {
+                @Override
+                public Void call() throws Exception {
+                    while (true){
+                        int available = inputStream.available();
+                        if (available > 0) {
+                            long skipped = inputStream.skip(available);
+                            Log.i(TAG, String.format("Skipped %d bytes", skipped));
+                        }
+                        Thread.sleep(50);
+                    }
                 }
+            };
 
-                Thread.sleep(50);
-            }
-        } catch (Exception e) {
+            ExecutorService executor = Executors.newFixedThreadPool(1);
+            Future<Void> future = executor.submit(readTask);
+            future.get(timeout, TimeUnit.MILLISECONDS);
+        } catch(TimeoutException te){
+            // Callable will timeout.
+        }catch (Exception e) {
             Log.e(TAG, e.toString());
         }
     }
