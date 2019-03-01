@@ -39,12 +39,16 @@ public class ModemUpdaterService extends IntentService {
         if(intent != null && intent.getAction() != null){
             // Check modem firmware version to see if an update is needed.
             // Try to get good result up to 6 times (AKA no errors when checking)
-            int result = -1;
-            for(int i = 0; i < 6; i++){
-                result = isModemFirmwareUpdateNeededThroughPort();
 
-                if(result != -1){
-                    break;
+            // Check shared preferences
+            int result = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE).getInt("ModemFirmwareUpdateNeeded", -1);
+            if(result == -1){
+                for(int i = 0; i < 6; i++){
+                    result = isModemFirmwareUpdateNeededThroughPort();
+
+                    if(result != -1){
+                        break;
+                    }
                 }
             }
 
@@ -73,14 +77,13 @@ public class ModemUpdaterService extends IntentService {
                     }
                 }
             }else if (result == -1){
-                // TODO: Better handling of error checking the modem version
+                // TODO: Better handling of error checking the modem version. Need to think of ideas to handle this.
                 Log.e(TAG, "Error checking modem firmware version.");
             }else{
-                // If LTE Modem Updater is installed then do full clean up the device
+                // If LTE Modem Updater is installed then start the modem updater
                 if(isAppInstalled(this, MODEM_APP_NAME)){
-                    // Maybe logs haven't been uploaded yet
-                    // TODO: Should we start the updater under the assumption that it is going to keep trying to upload the logs? Probably.
-                    Log.i(TAG, "No modem firmware update needed but LTE Modem Updater is installed. Starting Modem Updater.");
+                    // It's likely the logs haven't been updated so start modem updater
+                    Log.i(TAG, "No modem firmware update needed but LTE Modem Updater is installed. Starting Modem Updater to upload logs.");
                     startModemUpdater();
                 }else{
                     Log.i(TAG, "Modem firmware already updated.");
@@ -120,41 +123,35 @@ public class ModemUpdaterService extends IntentService {
             Log.e(TAG, e.toString());
         }
 
-        // If Communitake isn't running
-        // TODO: This assumption might not always be true. Might need to refactor this code.
-        if(!isAppRunning(this, COMM_APP_NAME)){
-            Log.i(TAG, "Communitake isn't running.");
-
-            try {
-                // If pincode isn't in place, then put it in place
-                File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
-                if(!pincodeFile.exists()){
-                    FileWriter fileWriter = new FileWriter(pincodeFile);
-                    fileWriter.write(PINCODE);
-                    fileWriter.flush();
-                    fileWriter.close();
-                    Log.i(TAG, "Wrote communitake pincode to file.");
-                }else{
-                    Log.i(TAG, "Pincode already exists.");
-                }
-
-                // Then launch Communitake
-                Intent launchIntent = this.getPackageManager().getLaunchIntentForPackage(COMM_APP_NAME);
-                if (launchIntent != null) {
-                    launchIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    this.startActivity(launchIntent);
-                    Log.i(TAG, "Sent intent to start Communitake");
-
-                    // Update shared preferences
-                    SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-                    sharedPref.edit().putBoolean("UpdateProcessStarted", true).apply();
-                }
-            } catch (IOException e) {
-                Log.e(TAG, e.toString());
+        // TODO: Is it bad to start Communitake if it is already running?
+        try {
+            // If pincode isn't in place, then put it in place
+            // TODO: Is it likely that a pincode will already exist?
+            File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
+            if(!pincodeFile.exists()){
+                FileWriter fileWriter = new FileWriter(pincodeFile);
+                fileWriter.write(PINCODE);
+                fileWriter.flush();
+                fileWriter.close();
+                Log.i(TAG, "Wrote communitake pincode to file.");
+            }else{
+                Log.i(TAG, "Pincode already exists.");
             }
-        }else{
-            Log.d(TAG, "Communitake is already running.");
+
+            // Then launch Communitake
+            Intent launchIntent = this.getPackageManager().getLaunchIntentForPackage(COMM_APP_NAME);
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                this.startActivity(launchIntent);
+                Log.i(TAG, "Sent intent to start Communitake");
+
+                // Update shared preferences
+                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+                sharedPref.edit().putBoolean("UpdateProcessStarted", true).apply();
+            }
+        } catch (IOException e) {
+            Log.e(TAG, e.toString());
         }
     }
 
@@ -213,6 +210,7 @@ public class ModemUpdaterService extends IntentService {
 
     // Return -1 on error, return 0 on no update needed, and return 1 on updated needed.
     private int isModemFirmwareUpdateNeededThroughPort(){
+        // TODO: Issues with this function when it fails. Stops/starts rild too much. Should limit it.
         // Try to stop rild to communicate with the modem
         if (!stopRild()) {
             Log.e(TAG, "Error killing rild. Could not properly update modem firmware.");
@@ -247,17 +245,32 @@ public class ModemUpdaterService extends IntentService {
                 // Return update needed
                 port.closePort();
                 startRild();
+
+                // Update shared preferences
+                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+                sharedPref.edit().putInt("ModemFirmwareUpdateNeeded", 1).apply();
+
                 return 1;
             }else{
                 // Return no update needed
                 port.closePort();
                 startRild();
+
+                // Update shared preferences
+                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+                sharedPref.edit().putInt("ModemFirmwareUpdateNeeded", 0).apply();
+
                 return 0;
             }
         } else {
             // Return error
             port.closePort();
             startRild();
+
+            // Update shared preferences
+            SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+            sharedPref.edit().putInt("ModemFirmwareUpdateNeeded", -1).apply();
+
             return -1;
         }
     }
