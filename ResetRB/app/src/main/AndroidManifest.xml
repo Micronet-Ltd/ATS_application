@@ -5,8 +5,7 @@
     <permission android:name="com.micronet.dsc.resetRB.resetClient" android:label="Reset Redbend Client" android:protectionLevel="signature"/>
 
     <uses-permission android:name="com.micronet.dsc.resetRB.resetClient" />
-
-
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"

@@ -13,9 +13,12 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Build;
 import android.util.Log;
+
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -149,6 +152,47 @@ public class ModemUpdaterService extends IntentService {
                 // Update shared preferences
                 SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
                 sharedPref.edit().putBoolean("UpdateProcessStarted", true).apply();
+
+                // TODO: Make sure that LTE Modem Updater is actually downloaded.
+                // If it isn't within a certain amount of time then try force stopping and starting
+                // Communitake again. Should use a relatively low amount of data for checkins.
+                // We are doing this to address the issue where Communitake fails to download even
+                // though it has good signal and a data connection. Not sure if we should make this
+                // separate service or not.
+
+                for(int i = 0; i < 10; i++){
+                    // Try to sleep for 10 minutes and then if Updater isn't installed and device
+                    // hasn't already been cleaned up, then force stop and start modem updater.
+                    try {
+                        Thread.sleep(600000);
+                    } catch (InterruptedException e) {
+                        Log.e(TAG, e.toString());
+                    }
+
+                    boolean cleaned = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE)
+                            .getBoolean("ModemUpdatedAndDeviceCleaned", false);
+                    boolean commRunning = isAppRunning(this, COMM_APP_NAME);
+                    boolean modemInstalled = isAppInstalled(this, MODEM_APP_NAME);
+
+                    // If we have cleaned or the updater is already installed then discontinue this loop.
+                    if (cleaned || modemInstalled) {
+                        break;
+                    }
+
+                    if(commRunning) {
+                        // Force stop Communitake and run it again
+                        runShellCommand(new String[]{"am", "force-stop", "com.communitake.mdc.micronet"});
+
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+
+                        // Start Communitake again
+                        this.startActivity(launchIntent);
+                    }
+                }
             }
         } catch (IOException e) {
             Log.e(TAG, e.toString());
@@ -273,5 +317,19 @@ public class ModemUpdaterService extends IntentService {
 
             return -1;
         }
+    }
+
+    private static void runShellCommand(String[] commands) throws IOException {
+        StringBuilder sb = new StringBuilder();
+
+        BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(Runtime.getRuntime().exec(commands).getInputStream()));
+        String line;
+        while ((line = bufferedReader.readLine()) != null) {
+            sb.append(line);
+        }
+
+        bufferedReader.close();
+
+        Log.i(TAG, "Clean up output: " + sb.toString());
     }
 }
