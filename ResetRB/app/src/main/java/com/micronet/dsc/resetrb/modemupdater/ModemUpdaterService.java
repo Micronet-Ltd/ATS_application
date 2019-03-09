@@ -14,6 +14,8 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Build;
 import android.util.Log;
 
+import com.micronet.dsc.resetrb.modemupdater.services.CommunitakeBackoffService;
+import com.micronet.dsc.resetrb.modemupdater.services.DropboxUploadService;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileWriter;
@@ -23,12 +25,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ModemUpdaterService extends IntentService {
-
     private static final String TAG = "ResetRB-UpdaterService";
-    private static final String MODEM_APP_NAME = "com.micronet.a317modemupdater";
-    private static final String COMM_APP_NAME = "com.communitake.mdc.micronet";
-    private static final String UPDATE_SUCCESSFUL = "com.micronet.dsc.resetrb.modemupdater.UPDATE_SUCCESSFUL";
-    static final String SHARED_PREF_FILE_KEY = "ModemUpdaterService";
+    public static final String MODEM_APP_NAME = "com.micronet.a317modemupdater";
+    public static final String COMM_APP_NAME = "com.communitake.mdc.micronet";
+
+    public static final String UPDATE_SUCCESSFUL = "com.micronet.dsc.resetrb.modemupdater.UPDATE_SUCCESSFUL";
+    public static final String COMM_BACKOFF = "com.micronet.dsc.resetrb.modemupdater.COMM_BACKOFF";
+    public static final String COMM_STARTED = "com.micronet.dsc.resetrb.modemupdater.COMM_STARTED";
+    public static final String DEVICE_CLEANED = "com.micronet.dsc.resetrb.modemupdater.DEVICE_CLEANED";
+    public static final String SHARED_PREF_FILE_KEY = "ModemUpdaterService";
 
     // Use specific pincode to put it into a certain group on communitake.
     private static final String PINCODE = "3983605404";
@@ -42,6 +47,12 @@ public class ModemUpdaterService extends IntentService {
         if(intent != null && intent.getAction() != null){
             // Check modem firmware version to see if an update is needed.
             // Try to get good result up to 6 times (AKA no errors when checking)
+
+            try {
+                Thread.sleep(30000);
+            } catch (InterruptedException e) {
+                Log.e(TAG, e.toString());
+            }
 
             // Check shared preferences
             int result = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE).getInt("ModemFirmwareUpdateNeeded", -1);
@@ -153,46 +164,17 @@ public class ModemUpdaterService extends IntentService {
                 SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
                 sharedPref.edit().putBoolean("UpdateProcessStarted", true).apply();
 
-                // TODO: Make sure that LTE Modem Updater is actually downloaded.
-                // If it isn't within a certain amount of time then try force stopping and starting
-                // Communitake again. Should use a relatively low amount of data for checkins.
-                // We are doing this to address the issue where Communitake fails to download even
-                // though it has good signal and a data connection. Not sure if we should make this
-                // separate service or not.
+                // Start backoff service for Communitake to make sure that app actually downloads
+                Intent communitakeBackoffService = new Intent(this, CommunitakeBackoffService.class);
+                communitakeBackoffService.setAction(COMM_BACKOFF);
+                this.startService(communitakeBackoffService);
+                Log.i(TAG, "Started Communitake Backoff Service.");
 
-                for(int i = 0; i < 10; i++){
-                    // Try to sleep for 10 minutes and then if Updater isn't installed and device
-                    // hasn't already been cleaned up, then force stop and start modem updater.
-                    try {
-                        Thread.sleep(600000);
-                    } catch (InterruptedException e) {
-                        Log.e(TAG, e.toString());
-                    }
-
-                    boolean cleaned = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE)
-                            .getBoolean("ModemUpdatedAndDeviceCleaned", false);
-                    boolean commRunning = isAppRunning(this, COMM_APP_NAME);
-                    boolean modemInstalled = isAppInstalled(this, MODEM_APP_NAME);
-
-                    // If we have cleaned or the updater is already installed then discontinue this loop.
-                    if (cleaned || modemInstalled) {
-                        break;
-                    }
-
-                    if(commRunning) {
-                        // Force stop Communitake and run it again
-                        runShellCommand(new String[]{"am", "force-stop", "com.communitake.mdc.micronet"});
-
-                        try {
-                            Thread.sleep(1000);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-
-                        // Start Communitake again
-                        this.startActivity(launchIntent);
-                    }
-                }
+                // Start upload service to upload logs to Dropbox
+                Intent dropboxUploadService = new Intent(this, DropboxUploadService.class);
+                dropboxUploadService.setAction(COMM_STARTED);
+                this.startService(dropboxUploadService);
+                Log.i(TAG, "Started Dropbox Upload Service.");
             }
         } catch (IOException e) {
             Log.e(TAG, e.toString());

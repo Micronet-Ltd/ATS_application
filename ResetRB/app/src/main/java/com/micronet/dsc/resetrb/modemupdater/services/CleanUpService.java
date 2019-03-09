@@ -1,35 +1,25 @@
-package com.micronet.dsc.resetrb.modemupdater;
+package com.micronet.dsc.resetrb.modemupdater.services;
 
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.DEVICE_CLEANED;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.SHARED_PREF_FILE_KEY;
-import static com.micronet.dsc.resetrb.modemupdater.Rild.startRild;
-import static com.micronet.dsc.resetrb.modemupdater.Rild.stopRild;
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.UPDATE_SUCCESSFUL;
 
-import android.app.ActivityManager;
-import android.app.ActivityManager.RunningAppProcessInfo;
 import android.app.IntentService;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
-import android.os.Build;
 import android.util.Log;
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.List;
 
-public class ModemUpdaterCleanUpService extends IntentService {
+public class CleanUpService extends IntentService {
 
     private static final String TAG = "ResetRB-CleanUpService";
-    private static final String UPDATE_SUCCESSFUL = "com.micronet.dsc.resetrb.modemupdater.UPDATE_SUCCESSFUL";
-    static final String SHARED_PREF_FILE_KEY = "ModemUpdaterService";
 
-    public ModemUpdaterCleanUpService() {
-        super("ModemUpdaterService");
+    public CleanUpService() {
+        super("CleanUpService");
     }
 
     @Override
@@ -40,7 +30,6 @@ public class ModemUpdaterCleanUpService extends IntentService {
                 // Clean up communitake and LTE Modem Updater
                 try {
                     // Force stop communitake, clear communitake, and uninstall updater.
-
                     // Not sure if we need to force stop communitake or not.
                     runShellCommand(new String[]{"am", "force-stop", "com.communitake.mdc.micronet"});
                     runShellCommand(new String[]{"pm", "clear", "com.communitake.mdc.micronet"});
@@ -65,6 +54,12 @@ public class ModemUpdaterCleanUpService extends IntentService {
                     sharedPref.edit().putBoolean("ModemUpdatedAndDeviceCleaned", true).apply();
 
                     Log.i(TAG, "Cleaned up device after successful modem firmware update.");
+
+                    // Start upload service to upload logs to Dropbox
+                    Intent dropboxUploadService = new Intent(this, DropboxUploadService.class);
+                    dropboxUploadService.setAction(DEVICE_CLEANED);
+                    this.startService(dropboxUploadService);
+                    Log.i(TAG, "Started Dropbox Upload Service.");
                 } catch (IOException e) {
                     Log.e(TAG, e.toString());
                 }

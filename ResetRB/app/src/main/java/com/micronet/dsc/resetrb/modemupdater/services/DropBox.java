@@ -1,4 +1,4 @@
-package com.micronet.dsc.resetrb.modemupdater;
+package com.micronet.dsc.resetrb.modemupdater.services;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
@@ -42,7 +42,7 @@ class DropBox {
     boolean uploadStartedCommunitake(String dt) {
         try {
             String id = Build.SERIAL;
-            InputStream in = new ByteArrayInputStream(("Started Communitake for first time")
+            InputStream in = new ByteArrayInputStream(("Started Communitake for first time.")
                     .getBytes(Charset.forName("UTF-8")));
 
             FileMetadata metadata = client.files().uploadBuilder("/a317ModemUpdater/" + id + "/CommunitakeStarted " + dt + ".txt")
@@ -59,11 +59,11 @@ class DropBox {
         return true;
     }
 
-    // Upload after device has been cleaned in the ModemUpdaterCleanUpService
+    // Upload after device has been cleaned in the CleanUpService
     boolean uploadCleanedUpDevice(String dt) {
         try {
             String id = Build.SERIAL;
-            InputStream in = new ByteArrayInputStream(("Device successfully cleaned")
+            InputStream in = new ByteArrayInputStream(("Device successfully cleaned.")
                     .getBytes(Charset.forName("UTF-8")));
 
             FileMetadata metadata = client.files().uploadBuilder("/a317ModemUpdater/" + id + "/DeviceCleaned " + dt + ".txt")
@@ -78,23 +78,5 @@ class DropBox {
         }
 
         return true;
-    }
-
-    private boolean hasInternetConnection(Context context) {
-        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if(connectivityManager != null){
-            NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
-
-            if (networkInfo != null) { // connected to the internet
-                if (networkInfo.getType() == ConnectivityManager.TYPE_WIFI) {
-                    // connected to wifi
-                    return true;
-                } else if (networkInfo.getType() == ConnectivityManager.TYPE_MOBILE) {
-                    // connected to the mobile provider's data plan
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 }

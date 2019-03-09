@@ -1,13 +1,15 @@
-package com.micronet.dsc.resetrb.modemupdater;
+package com.micronet.dsc.resetrb.modemupdater.receivers;
+
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.UPDATE_SUCCESSFUL;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.util.Log;
+import com.micronet.dsc.resetrb.modemupdater.services.CleanUpService;
 
 public class UpdateSuccessfulReceiver extends BroadcastReceiver {
     private static final String TAG = "ResetRB-FirmwareUpdate";
-    private static final String UPDATE_SUCCESSFUL = "com.micronet.dsc.resetrb.modemupdater.UPDATE_SUCCESSFUL";
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -22,7 +24,7 @@ public class UpdateSuccessfulReceiver extends BroadcastReceiver {
     }
 
     private void startModemUpdaterCleanUpService(Context context, Intent intent){
-        Intent modemCleanUpService = new Intent(context, ModemUpdaterCleanUpService.class);
+        Intent modemCleanUpService = new Intent(context, CleanUpService.class);
         modemCleanUpService.setAction(intent.getAction());
         context.startService(modemCleanUpService);
         Log.i(TAG, "Started Modem Updater Clean Up Service.");

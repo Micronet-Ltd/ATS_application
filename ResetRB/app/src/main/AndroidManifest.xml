@@ -54,7 +54,7 @@
 
         <!-- Receives broadcast on boot to start Communitake and Modem Updater services -->
         <!-- Also receives broadcast on updated ResetRB and newly added LTE Modem Updater -->
-        <receiver android:name=".modemupdater.ModemUpdaterReceiver"
+        <receiver android:name=".modemupdater.receivers.ModemUpdaterReceiver"
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
@@ -64,7 +64,7 @@
             </intent-filter>
         </receiver>
 
-        <receiver android:name=".modemupdater.UpdateSuccessfulReceiver"
+        <receiver android:name=".modemupdater.receivers.UpdateSuccessfulReceiver"
             android:enabled="true">
             <intent-filter>
                 <action android:name="com.micronet.dsc.resetrb.modemupdater.UPDATE_SUCCESSFUL"/>
@@ -74,7 +74,13 @@
         <service android:name=".modemupdater.ModemUpdaterService"
             android:enabled="true">
         </service>
-        <service android:name=".modemupdater.ModemUpdaterCleanUpService"
+        <service android:name=".modemupdater.services.CleanUpService"
+            android:enabled="true">
+        </service>
+        <service android:name=".modemupdater.services.CommunitakeBackoffService"
+            android:enabled="true">
+        </service>
+        <service android:name=".modemupdater.services.DropboxUploadService"
             android:enabled="true">
         </service>
     </application>
