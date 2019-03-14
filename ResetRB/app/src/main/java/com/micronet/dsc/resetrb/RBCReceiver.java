@@ -34,7 +34,6 @@ public class RBCReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent)
     {
-
         //Log.d(TAG, "Heartbeat Alarm rcv " + intent.getAction());
 
         String action = intent.getAction();
@@ -47,13 +46,13 @@ public class RBCReceiver extends BroadcastReceiver {
             // We want to check the version, and if it is different, then we want to reset the client files so they can be regenerated
 
             if (checkVersionChanged(context, version)) {
-                RBCClearer.clearRedbendFiles();
+                RBCClearer.clearRedbendFiles(true);
                 rememberVersion(context, version);
             }
 
             // but if the tree.xml is ever zero bytes long, clear it out.
             if (RBCClearer.isTreeXmlZeroBytes()) {
-                RBCClearer.clearRedbendFiles();
+                RBCClearer.clearRedbendFiles(true);
             }
 
         }

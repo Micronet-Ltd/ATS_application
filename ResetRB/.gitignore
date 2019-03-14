@@ -6,3 +6,4 @@
 /build
 /.idea/*
 ResetRB.iml
+*.keystore
