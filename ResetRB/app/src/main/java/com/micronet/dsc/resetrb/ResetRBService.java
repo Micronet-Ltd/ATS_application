@@ -33,6 +33,8 @@ public class ResetRBService extends Service {
     public static final String ACTION_EXTRA_START_TOD_S = "startSecondsAfterLocalMidnight"; // number of seconds after local time's midnight to start allowing Installation
     public static final String ACTION_EXTRA_END_TOD_S = "endSecondsAfterLocalMidnight"; // number of seconds after local time's midnight to stop allowing Installation
 
+    public static final String ACTION_EXTRA_BOOLEAN_CHECK_IN = "checkIn";
+
     public ResetRBService() {
     }
 
@@ -69,7 +71,9 @@ public class ResetRBService extends Service {
         if (action.equals(ResetRBService.START_SERVICE_ACTION_RESET)) {
             android.util.Log.i(TAG, "Reseting Redbend Client ");
 
-            RBCClearer.clearRedbendFiles();
+            // Check if manual check is wanted
+            boolean manualCheck = intent.getBooleanExtra(ACTION_EXTRA_BOOLEAN_CHECK_IN, true);
+            RBCClearer.clearRedbendFiles(manualCheck);
             broadcastResetReply();
 
         }
