@@ -1,8 +1,10 @@
 package com.micronet.dsc.resetrb.modemupdater.services;
 
-import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.DEVICE_CLEANED;
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.DEVICE_CLEANED_ACTION;
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.MODEM_UPDATED_AND_CLEANED_KEY;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.SHARED_PREF_FILE_KEY;
-import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.UPDATE_SUCCESSFUL;
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.UPDATE_SUCCESSFUL_ACTION;
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.runShellCommand;
 
 import android.app.IntentService;
 import android.content.Context;
@@ -25,9 +27,8 @@ public class CleanUpService extends IntentService {
     @Override
     protected void onHandleIntent(Intent intent) {
         if(intent.getAction() != null) {
-            if(intent.getAction().equalsIgnoreCase(UPDATE_SUCCESSFUL)){
-                // Modem Firmware Update Successful
-                // Clean up communitake and LTE Modem Updater
+            if(intent.getAction().equalsIgnoreCase(UPDATE_SUCCESSFUL_ACTION)){
+                // Modem Firmware Update Successful, clean up communitake and LTE Modem Updater
                 try {
                     // Force stop communitake, clear communitake, and uninstall updater.
                     // Not sure if we need to force stop communitake or not.
@@ -51,13 +52,13 @@ public class CleanUpService extends IntentService {
 
                     // Update shared preferences
                     SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-                    sharedPref.edit().putBoolean("ModemUpdatedAndDeviceCleaned", true).apply();
+                    sharedPref.edit().putBoolean(MODEM_UPDATED_AND_CLEANED_KEY, true).apply();
 
                     Log.i(TAG, "Cleaned up device after successful modem firmware update.");
 
                     // Start upload service to upload logs to Dropbox
                     Intent dropboxUploadService = new Intent(this, DropboxUploadService.class);
-                    dropboxUploadService.setAction(DEVICE_CLEANED);
+                    dropboxUploadService.setAction(DEVICE_CLEANED_ACTION);
                     this.startService(dropboxUploadService);
                     Log.i(TAG, "Started Dropbox Upload Service.");
                 } catch (IOException e) {
@@ -65,19 +66,5 @@ public class CleanUpService extends IntentService {
                 }
             }
         }
-    }
-
-    private static void runShellCommand(String[] commands) throws IOException {
-        StringBuilder sb = new StringBuilder();
-
-        BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(Runtime.getRuntime().exec(commands).getInputStream()));
-        String line;
-        while ((line = bufferedReader.readLine()) != null) {
-            sb.append(line);
-        }
-
-        bufferedReader.close();
-
-        Log.i(TAG, "Clean up output: " + sb.toString());
     }
 }

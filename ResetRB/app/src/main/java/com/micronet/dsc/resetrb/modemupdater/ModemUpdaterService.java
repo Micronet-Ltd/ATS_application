@@ -24,18 +24,30 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Service that checks modem firmware version and starts update process if needed.
+ */
 public class ModemUpdaterService extends IntentService {
+
     private static final String TAG = "ResetRB-UpdaterService";
+    public static final boolean DBG = true;
+
+    // App names
     public static final String MODEM_APP_NAME = "com.micronet.a317modemupdater";
     public static final String COMM_APP_NAME = "com.communitake.mdc.micronet";
 
-    public static final String UPDATE_SUCCESSFUL = "com.micronet.dsc.resetrb.modemupdater.UPDATE_SUCCESSFUL";
-    public static final String COMM_BACKOFF = "com.micronet.dsc.resetrb.modemupdater.COMM_BACKOFF";
-    public static final String COMM_STARTED = "com.micronet.dsc.resetrb.modemupdater.COMM_STARTED";
-    public static final String DEVICE_CLEANED = "com.micronet.dsc.resetrb.modemupdater.DEVICE_CLEANED";
-    public static final String SHARED_PREF_FILE_KEY = "ModemUpdaterService";
+    // Actions
+    public static final String UPDATE_SUCCESSFUL_ACTION = "com.micronet.dsc.resetrb.modemupdater.UPDATE_SUCCESSFUL_ACTION";
+    public static final String COMM_BACKOFF_ACTION = "com.micronet.dsc.resetrb.modemupdater.COMM_BACKOFF_ACTION";
+    public static final String COMM_STARTED_ACTION = "com.micronet.dsc.resetrb.modemupdater.COMM_STARTED_ACTION";
+    public static final String DEVICE_CLEANED_ACTION = "com.micronet.dsc.resetrb.modemupdater.DEVICE_CLEANED_ACTION";
 
-    // Use specific pincode to put it into a certain group on communitake.
+    // Keys
+    public static final String SHARED_PREF_FILE_KEY = "ModemUpdaterService";
+    public static final String MODEM_UPDATE_NEEDED_KEY = "ModemFirmwareUpdateNeeded";
+    public static final String MODEM_UPDATE_PROCESS_STARTED_KEY = "UpdateProcessStarted";
+    public static final String MODEM_UPDATED_AND_CLEANED_KEY = "ModemUpdatedAndDeviceCleaned";
+
     private static final String PINCODE = "3983605404";
 
     public ModemUpdaterService() {
@@ -44,112 +56,95 @@ public class ModemUpdaterService extends IntentService {
 
     @Override
     protected void onHandleIntent(Intent intent) {
-        if(intent != null && intent.getAction() != null){
-            // Check modem firmware version to see if an update is needed.
-            // Try to get good result up to 6 times (AKA no errors when checking)
+        if (intent != null && intent.getAction() != null) {
+            // Sleep 30 seconds
+            sleep(30000);
 
-            try {
-                Thread.sleep(30000);
-            } catch (InterruptedException e) {
-                Log.e(TAG, e.toString());
+            // Check if update is needed
+            int result = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE).getInt(MODEM_UPDATE_NEEDED_KEY, -1);
+            if (result == -1) {
+                result = isModemFirmwareUpdateNeededThroughSettings();
             }
 
-            // Check shared preferences
-            int result = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE).getInt("ModemFirmwareUpdateNeeded", -1);
-            if(result == -1){
-                for(int i = 0; i < 6; i++){
-                    result = isModemFirmwareUpdateNeededThroughPort();
+            switch (result) {
+                case 1: // If an update is needed then handle broadcast and start needed apps
+                    if (intent.getAction()
+                            .equalsIgnoreCase(Intent.ACTION_BOOT_COMPLETED)) { // Boot Completed Intent, start Communitake and Modem Updater
+                        if (DBG) Log.i(TAG, "Trying to start Communitake Service");
+                        startCommunitake();
 
-                    if(result != -1){
-                        break;
+                        if (DBG) Log.i(TAG, "Trying to start LTE Modem Updater");
+                        startModemUpdater();
+                    } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_REPLACED)) { // New version of ResetRB installed
+                        if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.dsc.resetrb")) {
+                            if (DBG) Log.i(TAG, "Trying to start Communitake Service");
+                            startCommunitake();
+                        }
+                    } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_ADDED)) { // LTE Modem Updater just installed
+                        if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.a317modemupdater")) {
+                            if (DBG) Log.i(TAG, "Trying to start LTE Modem Updater");
+                            startModemUpdater();
+                        }
                     }
-                }
-            }
-
-            Log.i(TAG, "Intent action is " + intent.getAction());
-            // If an update is needed then handle broadcast and start needed apps
-            if(result == 1){
-                if(intent.getAction().equalsIgnoreCase(Intent.ACTION_BOOT_COMPLETED)){
-                    // Boot Completed Intent
-                    // Start Communitake and Modem Updater
-                    Log.i(TAG, "Trying to start Communitake Service");
-                    startCommunitake();
-
-                    Log.i(TAG, "Trying to start LTE Modem Updater");
-                    startModemUpdater();
-                }else if(intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_REPLACED)){
-                    if(intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.dsc.resetrb")){
-                        // New version of ResetRB installed
-                        Log.i(TAG, "Trying to start Communitake Service");
+                    break;
+                case -1:
+                    // TODO: Better handling of error checking the modem version. Need to think of ideas to handle this.
+                    if (DBG) Log.e(TAG, "Error checking modem firmware version.");
+                    break;
+                default:
+                    // If LTE Modem Updater is installed then start the modem updater
+                    if (isAppInstalled(this, MODEM_APP_NAME)) {
+                        // It's likely the logs haven't been updated so start modem updater
+                        if (DBG) Log.i(TAG, "No modem firmware update needed but LTE Modem Updater is installed. Starting Modem Updater to upload logs.");
+                        startModemUpdater();
+                    } else {
+                        if (DBG) Log.i(TAG, "Modem firmware already updated.");
+                        // TODO: Remove this line below. Only adding for testing purposes.
                         startCommunitake();
                     }
-                }else if(intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_ADDED)) {
-                    if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.a317modemupdater")) {
-                        // LTE Modem Updater just installed
-                        Log.i(TAG, "Trying to start LTE Modem Updater");
-                        startModemUpdater();
-                    }
-                }
-            }else if (result == -1){
-                // TODO: Better handling of error checking the modem version. Need to think of ideas to handle this.
-                Log.e(TAG, "Error checking modem firmware version.");
-            }else{
-                // If LTE Modem Updater is installed then start the modem updater
-                if(isAppInstalled(this, MODEM_APP_NAME)){
-                    // It's likely the logs haven't been updated so start modem updater
-                    Log.i(TAG, "No modem firmware update needed but LTE Modem Updater is installed. Starting Modem Updater to upload logs.");
-                    startModemUpdater();
-                }else{
-                    Log.i(TAG, "Modem firmware already updated.");
-                    // TODO: Remove this line below. Only adding for testing purposes.
-                    startCommunitake();
-                }
+                    break;
             }
         }
     }
 
-    private void startModemUpdater(){
+    private void startModemUpdater() {
         // Check and see if LTE Modem Updater is installed
-        if(isAppInstalled(this, MODEM_APP_NAME)){
+        if (isAppInstalled(this, MODEM_APP_NAME)) {
             // If LTE Modem Updater isn't running
-            if(!isAppRunning(this, MODEM_APP_NAME)){
+            if (!isAppRunning(this, MODEM_APP_NAME)) {
                 // Launch LTE Modem Updater
                 Intent launchIntent = this.getPackageManager().getLaunchIntentForPackage(MODEM_APP_NAME);
                 if (launchIntent != null) {
                     launchIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     this.startActivity(launchIntent);
-                    Log.i(TAG, "Started LTE Modem Updater");
+                    if (DBG) Log.i(TAG, "Started LTE Modem Updater");
                 }
-            }else{
-                Log.d(TAG, "LTE Modem Updater is already running.");
+            } else {
+                if (DBG) Log.e(TAG, "LTE Modem Updater is already running.");
             }
-        }else{
-            Log.d(TAG, "LTE Modem Updater isn't installed.");
+        } else {
+            if (DBG) Log.e(TAG, "LTE Modem Updater isn't installed.");
         }
     }
 
-    private void startCommunitake(){
+    private void startCommunitake() {
         // Sleep for initial 15 seconds
-        try {
-            Thread.sleep(15000);
-        } catch (InterruptedException e) {
-            Log.e(TAG, e.toString());
-        }
+        sleep(15000);
 
         // TODO: Is it bad to start Communitake if it is already running?
         try {
             // If pincode isn't in place, then put it in place
             // TODO: Is it likely that a pincode will already exist?
             File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
-            if(!pincodeFile.exists()){
+            if (!pincodeFile.exists()) {
                 FileWriter fileWriter = new FileWriter(pincodeFile);
                 fileWriter.write(PINCODE);
                 fileWriter.flush();
                 fileWriter.close();
-                Log.i(TAG, "Wrote communitake pincode to file.");
-            }else{
-                Log.i(TAG, "Pincode already exists.");
+                if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
+            } else {
+                if (DBG) Log.i(TAG, "Pincode already exists.");
             }
 
             // Then launch Communitake
@@ -158,35 +153,34 @@ public class ModemUpdaterService extends IntentService {
                 launchIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 this.startActivity(launchIntent);
-                Log.i(TAG, "Sent intent to start Communitake");
+                if (DBG) Log.i(TAG, "Sent intent to start Communitake");
 
                 // Update shared preferences
                 SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-                sharedPref.edit().putBoolean("UpdateProcessStarted", true).apply();
+                sharedPref.edit().putBoolean(MODEM_UPDATE_PROCESS_STARTED_KEY, true).apply();
 
                 // Start backoff service for Communitake to make sure that app actually downloads
                 Intent communitakeBackoffService = new Intent(this, CommunitakeBackoffService.class);
-                communitakeBackoffService.setAction(COMM_BACKOFF);
+                communitakeBackoffService.setAction(COMM_BACKOFF_ACTION);
                 this.startService(communitakeBackoffService);
-                Log.i(TAG, "Started Communitake Backoff Service.");
+                if (DBG) Log.i(TAG, "Started Communitake Backoff Service.");
 
                 // Start upload service to upload logs to Dropbox
                 Intent dropboxUploadService = new Intent(this, DropboxUploadService.class);
-                dropboxUploadService.setAction(COMM_STARTED);
+                dropboxUploadService.setAction(COMM_STARTED_ACTION);
                 this.startService(dropboxUploadService);
-                Log.i(TAG, "Started Dropbox Upload Service.");
+                if (DBG) Log.i(TAG, "Started Dropbox Upload Service.");
             }
         } catch (IOException e) {
-            Log.e(TAG, e.toString());
+            if (DBG) Log.e(TAG, e.toString());
         }
     }
 
-    private static boolean isAppRunning(final Context context, final String appName) {
+    public static boolean isAppRunning(final Context context, final String appName) {
         final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-        if(activityManager != null){
+        if (activityManager != null) {
             final List<RunningAppProcessInfo> procInfos = activityManager.getRunningAppProcesses();
-            if (procInfos != null)
-            {
+            if (procInfos != null) {
                 for (final ActivityManager.RunningAppProcessInfo processInfo : procInfos) {
                     if (processInfo.processName.equals(appName)) {
                         return true;
@@ -197,7 +191,7 @@ public class ModemUpdaterService extends IntentService {
         return false;
     }
 
-    private static boolean isAppInstalled(Context context, String appName) {
+    public static boolean isAppInstalled(Context context, String appName) {
         try {
             PackageManager pm = context.getPackageManager();
             pm.getPackageInfo(appName, 0);
@@ -213,95 +207,33 @@ public class ModemUpdaterService extends IntentService {
         String radioVersion = Build.getRadioVersion();
 
         if (radioVersion != null) {
-            Log.i(TAG, "Modem firmware version: " + radioVersion);
+            if (DBG) Log.i(TAG, "Modem firmware version: " + radioVersion);
 
-            // Populate versions that need updates
-            // Radio version does not contain the extended version number
+            // Populate versions that need updates, radio version does not contain the extended version number
             ArrayList<String> versionsThatNeedUpdate = new ArrayList<>();
             versionsThatNeedUpdate.add("20.00.034");
             versionsThatNeedUpdate.add("20.00.522");
 
             if (versionsThatNeedUpdate.contains(radioVersion)) {
-                // Update needed
+                // Update needed, update shared preferences
+                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+                sharedPref.edit().putInt(MODEM_UPDATE_NEEDED_KEY, 1).apply();
                 return 1;
             } else {
-                // Update not needed
+                // Update not needed, update shared preferences
+                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+                sharedPref.edit().putInt(MODEM_UPDATE_NEEDED_KEY, 0).apply();
                 return 0;
             }
         } else {
-            // Return error
-            return -1;
-        }
-    }
-
-    // Return -1 on error, return 0 on no update needed, and return 1 on updated needed.
-    private int isModemFirmwareUpdateNeededThroughPort(){
-        // TODO: Issues with this function when it fails. Stops/starts rild too much. Should limit it.
-        // Try to stop rild to communicate with the modem
-        if (!stopRild()) {
-            Log.e(TAG, "Error killing rild. Could not properly update modem firmware.");
-            startRild();
-            return -1;
-        }
-
-        // Try to set up the port to communicate with the modem
-        Port port = new Port("/dev/ttyACM0");
-        if (!port.setupPort()) {
-            port.closePort();
-            startRild();
-            return -1;
-        }
-
-        if (port.testConnection()) {
-            // Check if this modem firmware version needs to be updated.
-            String modemType = port.getModemType();
-            String modemFirmwareVersion = port.getModemVersion();
-
-            Log.i(TAG, "Modem type: " + modemType + ", Modem firmware version: " + modemFirmwareVersion);
-
-            // Populate versions that need updates
-            ArrayList<String> versionsThatNeedUpdate = new ArrayList<>();
-            versionsThatNeedUpdate.add("20.00.034.4");
-            versionsThatNeedUpdate.add("20.00.034.6");
-            versionsThatNeedUpdate.add("20.00.034.10");
-            versionsThatNeedUpdate.add("20.00.522.4");
-            versionsThatNeedUpdate.add("20.00.522.7");
-
-            if(versionsThatNeedUpdate.contains(modemFirmwareVersion)){
-                // Return update needed
-                port.closePort();
-                startRild();
-
-                // Update shared preferences
-                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-                sharedPref.edit().putInt("ModemFirmwareUpdateNeeded", 1).apply();
-
-                return 1;
-            }else{
-                // Return no update needed
-                port.closePort();
-                startRild();
-
-                // Update shared preferences
-                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-                sharedPref.edit().putInt("ModemFirmwareUpdateNeeded", 0).apply();
-
-                return 0;
-            }
-        } else {
-            // Return error
-            port.closePort();
-            startRild();
-
-            // Update shared preferences
+            // Return error, update shared preferences
             SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-            sharedPref.edit().putInt("ModemFirmwareUpdateNeeded", -1).apply();
-
+            sharedPref.edit().putInt(MODEM_UPDATE_NEEDED_KEY, -1).apply();
             return -1;
         }
     }
 
-    private static void runShellCommand(String[] commands) throws IOException {
+    public static void runShellCommand(String[] commands) throws IOException {
         StringBuilder sb = new StringBuilder();
 
         BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(Runtime.getRuntime().exec(commands).getInputStream()));
@@ -312,6 +244,84 @@ public class ModemUpdaterService extends IntentService {
 
         bufferedReader.close();
 
-        Log.i(TAG, "Clean up output: " + sb.toString());
+        if (DBG) Log.i(TAG, "Shell command output: " + sb.toString());
     }
+
+    public static void sleep(long ms){
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Log.e(TAG, e.toString());
+        }
+    }
+
+//    /**
+//     * Queries modem firmware version and returns whether an update is needed.
+//     * @return -1 on error, return 0 on no update needed, and return 1 on updated needed.
+//     */
+//    private int isModemFirmwareUpdateNeededThroughPort() {
+//        // Issues with this function when it fails. Stops/starts rild too much. Should limit it.
+//        // Try to stop rild to communicate with the modem
+//        if (!stopRild()) {
+//            if (DBG) Log.e(TAG, "Error killing rild. Could not properly update modem firmware.");
+//            startRild();
+//            return -1;
+//        }
+//
+//        // Try to set up the port to communicate with the modem
+//        Port port = new Port("/dev/ttyACM0");
+//        if (!port.setupPort()) {
+//            port.closePort();
+//            startRild();
+//            return -1;
+//        }
+//
+//        if (port.testConnection()) {
+//            // Check if this modem firmware version needs to be updated.
+//            String modemType = port.getModemType();
+//            String modemFirmwareVersion = port.getModemVersion();
+//
+//            if (DBG) Log.i(TAG, "Modem type: " + modemType + ", Modem firmware version: " + modemFirmwareVersion);
+//
+//            // Populate versions that need updates
+//            ArrayList<String> versionsThatNeedUpdate = new ArrayList<>();
+//            versionsThatNeedUpdate.add("20.00.034.4");
+//            versionsThatNeedUpdate.add("20.00.034.6");
+//            versionsThatNeedUpdate.add("20.00.034.10");
+//            versionsThatNeedUpdate.add("20.00.522.4");
+//            versionsThatNeedUpdate.add("20.00.522.7");
+//
+//            if (versionsThatNeedUpdate.contains(modemFirmwareVersion)) {
+//                // Return update needed
+//                port.closePort();
+//                startRild();
+//
+//                // Update shared preferences
+//                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+//                sharedPref.edit().putInt(MODEM_UPDATE_NEEDED_KEY, 1).apply();
+//
+//                return 1;
+//            } else {
+//                // Return no update needed
+//                port.closePort();
+//                startRild();
+//
+//                // Update shared preferences
+//                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+//                sharedPref.edit().putInt(MODEM_UPDATE_NEEDED_KEY, 0).apply();
+//
+//                return 0;
+//            }
+//        } else {
+//            // Return error
+//            port.closePort();
+//            startRild();
+//
+//            // Update shared preferences
+//            SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
+//            sharedPref.edit().putInt(MODEM_UPDATE_NEEDED_KEY, -1).apply();
+//
+//            return -1;
+//        }
+//    }
 }

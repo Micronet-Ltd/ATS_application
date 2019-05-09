@@ -1,5 +1,7 @@
 package com.micronet.dsc.resetrb.modemupdater;
 
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.DBG;
+
 import android.util.Log;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -27,23 +29,23 @@ class Rild {
                 String output = runShellCommand(new String[]{"/system/bin/getprop"});
 
                 if (output.toLowerCase().contains("[init.svc.ril-daemon]: [running]")) {
-                    Log.i(TAG, "Rild started");
+                    if (DBG) Log.i(TAG, "Rild started");
                     return true;
                 } else {
-                    Log.d(TAG, "Rild not started correctly, trying again.");
+                    if (DBG) Log.d(TAG, "Rild not started correctly, trying again.");
                     try {
                         Thread.sleep(100);
                     } catch (InterruptedException e) {
-                        Log.e(TAG, e.toString());
+                        if (DBG) Log.e(TAG, e.toString());
                     }
                 }
             } catch (IOException e) {
-                Log.e(TAG, "Error rild not started correctly" + e.toString());
+                if (DBG) Log.e(TAG, "Error rild not started correctly" + e.toString());
                 return false;
             }
         }
 
-        Log.e(TAG, "Error rild not started correctly.");
+        if (DBG) Log.e(TAG, "Error rild not started correctly.");
         return false;
     }
 
@@ -62,23 +64,23 @@ class Rild {
                 String output = runShellCommand(new String[]{"/system/bin/getprop"});
 
                 if (output.toLowerCase().contains("[init.svc.ril-daemon]: [stopped]")) {
-                    Log.i(TAG, "Rild stopped");
+                    if (DBG) Log.i(TAG, "Rild stopped");
                     return true;
                 } else {
-                    Log.d(TAG, "Rild not stopped correctly, trying again.");
+                    if (DBG) Log.d(TAG, "Rild not stopped correctly, trying again.");
                     try {
                         Thread.sleep(100);
                     } catch (InterruptedException e) {
-                        Log.e(TAG, e.toString());
+                        if (DBG) Log.e(TAG, e.toString());
                     }
                 }
             } catch (IOException e) {
-                Log.e(TAG, "Error rild not stopped correctly" + e.toString());
+                if (DBG) Log.e(TAG, "Error rild not stopped correctly" + e.toString());
                 return false;
             }
         }
 
-        Log.e(TAG, "Error rild not stopped correctly");
+        if (DBG) Log.e(TAG, "Error rild not stopped correctly");
         return false;
     }
 
