@@ -1,14 +1,10 @@
 package com.micronet.dsc.resetrb.modemupdater;
 
-import static com.micronet.dsc.resetrb.modemupdater.Rild.startRild;
-import static com.micronet.dsc.resetrb.modemupdater.Rild.stopRild;
-
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningAppProcessInfo;
 import android.app.IntentService;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Build;
@@ -41,6 +37,7 @@ public class ModemUpdaterService extends IntentService {
     public static final String COMM_BACKOFF_ACTION = "com.micronet.dsc.resetrb.modemupdater.COMM_BACKOFF_ACTION";
     public static final String COMM_STARTED_ACTION = "com.micronet.dsc.resetrb.modemupdater.COMM_STARTED_ACTION";
     public static final String DEVICE_CLEANED_ACTION = "com.micronet.dsc.resetrb.modemupdater.DEVICE_CLEANED_ACTION";
+    public static final String ERROR_CHECKING_VERSION_ACTION = "com.micronet.dsc.resetrb.modemupdater.ERROR_CHECKING_VERSION";
 
     // Keys
     public static final String SHARED_PREF_FILE_KEY = "ModemUpdaterService";
@@ -48,6 +45,7 @@ public class ModemUpdaterService extends IntentService {
     public static final String MODEM_UPDATE_PROCESS_STARTED_KEY = "UpdateProcessStarted";
     public static final String MODEM_UPDATED_AND_CLEANED_KEY = "ModemUpdatedAndDeviceCleaned";
 
+    // TODO Possibly make pincode configurable?
     private static final String PINCODE = "3983605404";
 
     public ModemUpdaterService() {
@@ -61,7 +59,7 @@ public class ModemUpdaterService extends IntentService {
             sleep(30000);
 
             // Check if update is needed
-            int result = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE).getInt(MODEM_UPDATE_NEEDED_KEY, -1);
+            int result = getInt(MODEM_UPDATE_NEEDED_KEY, -1);
             if (result == -1) {
                 result = isModemFirmwareUpdateNeededThroughSettings();
             }
@@ -88,8 +86,13 @@ public class ModemUpdaterService extends IntentService {
                     }
                     break;
                 case -1:
-                    // TODO: Better handling of error checking the modem version. Need to think of ideas to handle this.
+                    // TODO Want to try to upload just once if there is an error checking the modem firmware version?
                     if (DBG) Log.e(TAG, "Error checking modem firmware version.");
+
+//                    // Try to report error to dropbox
+//                    Intent dropboxUploadService = new Intent(this, DropboxUploadService.class);
+//                    dropboxUploadService.setAction(ERROR_CHECKING_VERSION_ACTION);
+//                    this.startService(dropboxUploadService);
                     break;
                 default:
                     // If LTE Modem Updater is installed then start the modem updater
@@ -99,7 +102,7 @@ public class ModemUpdaterService extends IntentService {
                         startModemUpdater();
                     } else {
                         if (DBG) Log.i(TAG, "Modem firmware already updated.");
-                        // TODO: Remove this line below. Only adding for testing purposes.
+                        // TODO Remove this line below. Only adding for testing purposes.
                         startCommunitake();
                     }
                     break;
@@ -156,8 +159,7 @@ public class ModemUpdaterService extends IntentService {
                 if (DBG) Log.i(TAG, "Sent intent to start Communitake");
 
                 // Update shared preferences
-                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-                sharedPref.edit().putBoolean(MODEM_UPDATE_PROCESS_STARTED_KEY, true).apply();
+                putBoolean(MODEM_UPDATE_PROCESS_STARTED_KEY, true);
 
                 // Start backoff service for Communitake to make sure that app actually downloads
                 Intent communitakeBackoffService = new Intent(this, CommunitakeBackoffService.class);
@@ -206,7 +208,7 @@ public class ModemUpdaterService extends IntentService {
         // Get the modem baseband version from settings
         String radioVersion = Build.getRadioVersion();
 
-        if (radioVersion != null) {
+        if (radioVersion != null && !radioVersion.trim().isEmpty()) {
             if (DBG) Log.i(TAG, "Modem firmware version: " + radioVersion);
 
             // Populate versions that need updates, radio version does not contain the extended version number
@@ -216,19 +218,16 @@ public class ModemUpdaterService extends IntentService {
 
             if (versionsThatNeedUpdate.contains(radioVersion)) {
                 // Update needed, update shared preferences
-                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-                sharedPref.edit().putInt(MODEM_UPDATE_NEEDED_KEY, 1).apply();
+                putInt(MODEM_UPDATE_NEEDED_KEY, 1);
                 return 1;
             } else {
                 // Update not needed, update shared preferences
-                SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-                sharedPref.edit().putInt(MODEM_UPDATE_NEEDED_KEY, 0).apply();
+                putInt(MODEM_UPDATE_NEEDED_KEY, 0);
                 return 0;
             }
         } else {
             // Return error, update shared preferences
-            SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-            sharedPref.edit().putInt(MODEM_UPDATE_NEEDED_KEY, -1).apply();
+            putInt(MODEM_UPDATE_NEEDED_KEY, -1);
             return -1;
         }
     }
@@ -253,6 +252,22 @@ public class ModemUpdaterService extends IntentService {
         } catch (InterruptedException e) {
             Log.e(TAG, e.toString());
         }
+    }
+
+    public void putInt(String key, int value) {
+        this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE).edit().putInt(key, value).apply();
+    }
+
+    public int getInt(String key, int defValue) {
+        return this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE).getInt(key, defValue);
+    }
+
+    public void putBoolean(String key, boolean value) {
+        this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE).edit().putBoolean(key, value).apply();
+    }
+
+    public boolean getBoolean(String key, boolean defValue) {
+        return this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE).getBoolean(key, defValue);
     }
 
 //    /**

@@ -3,6 +3,7 @@ package com.micronet.dsc.resetrb.modemupdater.services;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.COMM_STARTED_ACTION;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.DBG;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.DEVICE_CLEANED_ACTION;
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.ERROR_CHECKING_VERSION_ACTION;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.sleep;
 
 import android.app.IntentService;
@@ -26,24 +27,34 @@ public class DropboxUploadService extends IntentService {
     @Override
     protected void onHandleIntent(Intent intent) {
         if(intent.getAction() != null) {
-            if(intent.getAction().equalsIgnoreCase(COMM_STARTED_ACTION) || intent.getAction().equalsIgnoreCase(DEVICE_CLEANED_ACTION)){
+            if(intent.getAction().equalsIgnoreCase(COMM_STARTED_ACTION) || intent.getAction().equalsIgnoreCase(DEVICE_CLEANED_ACTION) ||
+                    intent.getAction().equals(ERROR_CHECKING_VERSION_ACTION)){
                 // Get the current dt to upload with log
                 String dt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Calendar.getInstance().getTime());
-                boolean communitakeStarted = intent.getAction().equalsIgnoreCase(COMM_STARTED_ACTION);
-
                 DropBox dropBox = new DropBox(this);
                 for(int i = 0; i < 10; i++) {
                     if(hasInternetConnection()){
-                        boolean result = communitakeStarted ? dropBox.uploadStartedCommunitake(dt): dropBox.uploadCleanedUpDevice(dt);
+                        boolean result = false;
+                        switch(intent.getAction()) {
+                            case COMM_STARTED_ACTION:
+                                result = dropBox.uploadStartedCommunitake(dt);
+                                break;
+                            case DEVICE_CLEANED_ACTION:
+                                result = dropBox.uploadCleanedUpDevice(dt);
+                                break;
+                            case ERROR_CHECKING_VERSION_ACTION:
+                                result = dropBox.uploadErrorCheckingModemVersion(dt);
+                                break;
+                        }
 
                         if(result) {
-                            if (DBG) Log.i(TAG, communitakeStarted ? "Uploaded Communitake started log.": "Uploaded device cleaned log.");
+                            if (DBG) Log.i(TAG, "Uploaded logs for action: " + intent.getAction());
                             break;
                         }
                     }
 
                     // Sleep two minutes before trying again
-                    if (DBG) Log.v(TAG, communitakeStarted ? "Couldn't upload Communitake started log at this time.": "Couldn't upload device cleaned at this time.");
+                    if (DBG) Log.v(TAG, "Couldn't upload logs at this time for action: " + intent.getAction());
                     sleep(120000);
                 }
             }

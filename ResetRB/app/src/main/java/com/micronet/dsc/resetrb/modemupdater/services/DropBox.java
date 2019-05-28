@@ -79,4 +79,25 @@ class DropBox {
 
         return true;
     }
+
+    // Upload after device has been cleaned in the CleanUpService
+    boolean uploadErrorCheckingModemVersion(String dt) {
+        try {
+            String id = Build.SERIAL;
+            InputStream in = new ByteArrayInputStream(("Error checking modem version is ResetRB.")
+                    .getBytes(Charset.forName("UTF-8")));
+
+            FileMetadata metadata = client.files().uploadBuilder("/a317ModemUpdater/" + id + "/ErrorCheckingModemVersion " + dt + ".txt")
+                    .withMode(WriteMode.ADD)
+                    .withAutorename(true).uploadAndFinish(in);
+        } catch (NetworkIOException e) {
+            Log.d(TAG, "Error: no network connection - " + e.toString());
+            return false;
+        } catch (Exception e) {
+            Log.e(TAG, e.toString());
+            return false;
+        }
+
+        return true;
+    }
 }
