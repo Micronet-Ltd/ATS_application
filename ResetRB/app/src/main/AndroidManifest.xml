@@ -5,8 +5,7 @@
     <permission android:name="com.micronet.dsc.resetRB.resetClient" android:label="Reset Redbend Client" android:protectionLevel="signature"/>
 
     <uses-permission android:name="com.micronet.dsc.resetRB.resetClient" />
-
-
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"
@@ -53,10 +52,39 @@
             </intent-filter>
         </receiver>
 
+        <!-- Receives broadcast on boot to start Communitake and Modem Updater services -->
+        <!-- Also receives broadcast on updated ResetRB and newly added LTE Modem Updater -->
+        <receiver android:name=".modemupdater.receivers.ModemUpdaterReceiver"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
 
+        <receiver android:name=".modemupdater.receivers.UpdateSuccessfulReceiver"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.micronet.dsc.resetrb.modemupdater.UPDATE_SUCCESSFUL_ACTION"/>
+            </intent-filter>
+        </receiver>
 
-
-
+        <service android:name=".modemupdater.ModemUpdaterService"
+            android:enabled="true">
+        </service>
+        <service android:name=".modemupdater.services.CleanUpService"
+            android:enabled="true">
+        </service>
+        <service android:name=".modemupdater.services.CommunitakeBackoffService"
+            android:enabled="true">
+        </service>
+        <service android:name=".modemupdater.services.DropboxUploadService"
+            android:enabled="true">
+        </service>
     </application>
 
 </manifest>
