@@ -58,6 +58,8 @@
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+            <intent-filter>
                 <action android:name="android.intent.action.PACKAGE_ADDED" />
                 <action android:name="android.intent.action.PACKAGE_REPLACED" />
                 <data android:scheme="package" />
@@ -67,7 +69,7 @@
         <receiver android:name=".modemupdater.receivers.UpdateSuccessfulReceiver"
             android:enabled="true">
             <intent-filter>
-                <action android:name="com.micronet.dsc.resetrb.modemupdater.UPDATE_SUCCESSFUL"/>
+                <action android:name="com.micronet.dsc.resetrb.modemupdater.UPDATE_SUCCESSFUL_ACTION"/>
             </intent-filter>
         </receiver>
 
