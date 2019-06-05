@@ -6,6 +6,8 @@
 
 package com.micronet.dsc.resetrb;
 
+import android.content.Context;
+import android.content.Intent;
 import android.util.Log;
 
 import java.io.BufferedReader;
@@ -27,10 +29,14 @@ public class RBCClearer {
     //  clears out the redbend client files required to reset the client
     //  /data/misc/rb/* and /data/data/com.redbend.client
     //////////////////////////////////////////////////////////////////
-    static void clearRedbendFiles() {
+    static void clearRedbendFiles(boolean manualCheck) {
 
         Log.d(TAG, "Clearing redbend client files");
         // since this has a wildcard it must be run in a shell
+
+        // Force stop Redbend client before cleaning files
+        Log.d(TAG, "Force stopping Redbend client");
+        stopRedbendClient();
 
         String command = "";
 
@@ -63,10 +69,53 @@ public class RBCClearer {
             Log.d(TAG, "Exception exec " + command + ": " +  e.getMessage());
         }
 
+        // Start Redbend Client
+        Log.d(TAG, "Starting Redbend client");
+        startRedbendClient();
+
+        if(manualCheck){
+            // Send broadcast to do a manual check in
+            Log.d(TAG, "Manually checking in on Redbend");
+            manualRedbendCheckIn();
+        }
     } // clearRedbendFiles
 
+    static void manualRedbendCheckIn(){
+        try {
+            Runtime.getRuntime().exec("am broadcast -a SwmClient.CHECK_FOR_UPDATES_NOW".split(" "));
+        } catch (Exception e) {
+            Log.e(TAG, "Exception exec: am force-stop com.redbend.client: " + e.getMessage());
+        }
+    }
 
+    static void stopRedbendClient(){
+        try {
+            Runtime.getRuntime().exec("am force-stop com.redbend.client".split(" ")).waitFor();
+        } catch (Exception e) {
+            Log.e(TAG, "Exception exec: am force-stop com.redbend.client: " + e.getMessage());
+        }
+    }
 
+    static void startRedbendClient(){
+        // -W means to wait for launch to complete
+        try {
+            Runtime.getRuntime().exec("am start -W com.redbend.client/.StartActivity".split(" ")).waitFor();
+        } catch (Exception e) {
+            Log.e(TAG, "Exception exec: am start com.redbend.client/.StartActivity: " + e.getMessage());
+        }
+    }
+
+    static boolean isTimeForPeriodicCleaning(long lastCleaning, long currentMilliseconds){
+        double difference = (double) currentMilliseconds - (double) lastCleaning;
+        // Convert to months to see if a month has elapsed
+        double seconds = difference/1000.0;
+        double minutes = seconds/60.0;
+        double hours = minutes/60.0;
+        double days = hours/24.0;
+        double months = days/30.0;
+
+        return months >= 1.0;
+    }
 
     /**
      * Does /data/data/com.redbend.client/files/tree.xml exist with a zero byte length?

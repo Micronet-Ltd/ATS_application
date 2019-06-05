@@ -2,14 +2,13 @@
 
 This repository contains 4 projects:
 
-1 ATS -- Android Telematics Service 
+1 ResetRB -- Resets the Redbend Client Data (accepts a command to reset from ATS and broadcasts the ACK)
 
-2 VBS -- Vehicle Bus Service (talks to the CAN and J1708 buses and forwards this info to ATS)
+2 ATS (Outdated) -- Android Telematics Service -- Refer to https://github.com/Micronet-Ltd/ATS for ATS on SmartHub/SmarTab and to https://github.com/Micronet-Ltd/ATS_legacy for ATS on A317
 
-3 ResetRB -- Resets the Redbend Client Data (accepts a command to reset from ATS and broadcasts the ACK)
+3 VBS (Outdated) -- Vehicle Bus Service -- Refer to https://github.com/Micronet-Ltd/VBS for VBS on all types of devices
 
-4 testapps -- apps used for testing devices/bugs or functionality
-
+4 Test Apps -- apps used for testing devices/bugs or functionality
 
 These projects require the correct system signing keys. Different hardware platforms have different keys. Sample files are included for you to copy and edit so they point to the correct keys.
 

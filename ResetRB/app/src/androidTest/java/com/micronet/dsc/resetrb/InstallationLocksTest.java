@@ -1,8 +1,10 @@
 package com.micronet.dsc.resetrb;
 
+import android.content.Context;
 import android.test.AndroidTestCase;
 import android.test.RenamingDelegatingContext;
 
+import android.util.Log;
 import java.util.Calendar;
 import java.util.TimeZone;
 
@@ -160,7 +162,12 @@ public class InstallationLocksTest extends AndroidTestCase {
 
     } // testReadDefault()
 
-
-
+    public void testBootCompletedReceived(){
+        try {
+            Runtime.getRuntime().exec("am broadcast -a android.intent.action.BOOT_COMPLETED -n com.micronet.dsc.resetrb/.InstallationLocksReceiver").waitFor();
+        } catch (Exception e) {
+            fail("Error sending broadcast: " + e.toString());
+        }
+    }
 
 } // class StateTest
