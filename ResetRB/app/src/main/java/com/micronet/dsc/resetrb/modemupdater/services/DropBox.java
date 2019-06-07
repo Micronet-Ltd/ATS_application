@@ -23,18 +23,16 @@ import java.nio.charset.Charset;
  * - ResetRB has cleaned up device after broadcast from LTE Modem Updater
  *
  * This way we know when Communitake has been started and when/if the device has been cleaned up.
- *
- * Backoff service should be handled in this class.
  */
 class DropBox {
 
     private final String TAG = "ResetRB-DropBox";
-    private final String ACCESS_TOKEN = "LPPT11VZzEAAAAAAAAAAU47-w7F3dzDyGLmL0IagOX5HsECjVqkVRUa6Rum2vGam";
+    private final String ACCESS_TOKEN = "LPPT11VZzEAAAAAAAAAA4ynGYT6dCM7XhuMS0YJcgt4fkehBOmlVAJTb8jhRPj3w";
     private DbxClientV2 client;
 
     DropBox(Context context) {
         // Create Dropbox client
-        DbxRequestConfig config = DbxRequestConfig.newBuilder("A317ModemUpdater/" + BuildConfig.VERSION_NAME).build();
+        DbxRequestConfig config = DbxRequestConfig.newBuilder("LTEModemUpdater/" + BuildConfig.VERSION_NAME).build();
         client = new DbxClientV2(config, ACCESS_TOKEN);
     }
 
@@ -45,7 +43,7 @@ class DropBox {
             InputStream in = new ByteArrayInputStream(("Started Communitake for first time.")
                     .getBytes(Charset.forName("UTF-8")));
 
-            FileMetadata metadata = client.files().uploadBuilder("/a317ModemUpdater/" + id + "/CommunitakeStarted " + dt + ".txt")
+            FileMetadata metadata = client.files().uploadBuilder("/" + id + "/CommunitakeStarted " + dt + ".txt")
                     .withMode(WriteMode.ADD)
                     .withAutorename(true).uploadAndFinish(in);
         } catch (NetworkIOException e) {
@@ -66,7 +64,7 @@ class DropBox {
             InputStream in = new ByteArrayInputStream(("Device successfully cleaned.")
                     .getBytes(Charset.forName("UTF-8")));
 
-            FileMetadata metadata = client.files().uploadBuilder("/a317ModemUpdater/" + id + "/DeviceCleaned " + dt + ".txt")
+            FileMetadata metadata = client.files().uploadBuilder("/" + id + "/DeviceCleaned " + dt + ".txt")
                     .withMode(WriteMode.ADD)
                     .withAutorename(true).uploadAndFinish(in);
         } catch (NetworkIOException e) {
@@ -87,7 +85,7 @@ class DropBox {
             InputStream in = new ByteArrayInputStream(("Error checking modem version is ResetRB.")
                     .getBytes(Charset.forName("UTF-8")));
 
-            FileMetadata metadata = client.files().uploadBuilder("/a317ModemUpdater/" + id + "/ErrorCheckingModemVersion " + dt + ".txt")
+            FileMetadata metadata = client.files().uploadBuilder("/" + id + "/ErrorCheckingModemVersion " + dt + ".txt")
                     .withMode(WriteMode.ADD)
                     .withAutorename(true).uploadAndFinish(in);
         } catch (NetworkIOException e) {
