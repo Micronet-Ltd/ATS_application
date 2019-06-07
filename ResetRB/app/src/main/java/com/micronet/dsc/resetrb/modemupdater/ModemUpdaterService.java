@@ -10,6 +10,7 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Build;
 import android.util.Log;
 
+import com.micronet.dsc.resetrb.modemupdater.services.CleanUpService;
 import com.micronet.dsc.resetrb.modemupdater.services.CommunitakeBackoffService;
 import com.micronet.dsc.resetrb.modemupdater.services.DropboxUploadService;
 import java.io.BufferedReader;
@@ -44,6 +45,10 @@ public class ModemUpdaterService extends IntentService {
     public static final String MODEM_UPDATE_NEEDED_KEY = "ModemFirmwareUpdateNeeded";
     public static final String MODEM_UPDATE_PROCESS_STARTED_KEY = "UpdateProcessStarted";
     public static final String MODEM_UPDATED_AND_CLEANED_KEY = "ModemUpdatedAndDeviceCleaned";
+    public static final String ERROR_CHECKING_MODEM_KEY = "ErrorCheckingModem";
+    public static final String ERROR_COULD_NOT_CHECK_MODEM_KEY = "ErrorCouldNotCheckModemMax";
+
+    public static final int MAX_NUMBER_OF_CHECKS = 5;
 
     // TODO Possibly make pincode configurable?
     private static final String PINCODE = "3983605404";
@@ -86,13 +91,21 @@ public class ModemUpdaterService extends IntentService {
                     }
                     break;
                 case -1:
-                    // TODO Want to try to upload just once if there is an error checking the modem firmware version?
                     if (DBG) Log.e(TAG, "Error checking modem firmware version.");
 
-//                    // Try to report error to dropbox
-//                    Intent dropboxUploadService = new Intent(this, DropboxUploadService.class);
-//                    dropboxUploadService.setAction(ERROR_CHECKING_VERSION_ACTION);
-//                    this.startService(dropboxUploadService);
+                    int numberOfTimesChecked = getInt(ERROR_CHECKING_MODEM_KEY, 0);
+                    if(numberOfTimesChecked < MAX_NUMBER_OF_CHECKS){
+                        // Try to report error to dropbox
+                        Intent dropboxUploadService = new Intent(this, DropboxUploadService.class);
+                        dropboxUploadService.setAction(ERROR_CHECKING_VERSION_ACTION);
+                        this.startService(dropboxUploadService);
+
+                        // Increment check counter
+                        putInt(ERROR_CHECKING_MODEM_KEY, numberOfTimesChecked+1);
+                    } else {
+                        // Stop checking because this isn't working
+                        putBoolean(ERROR_COULD_NOT_CHECK_MODEM_KEY, true);
+                    }
                     break;
                 default:
                     // If LTE Modem Updater is installed then start the modem updater
@@ -102,8 +115,10 @@ public class ModemUpdaterService extends IntentService {
                         startModemUpdater();
                     } else {
                         if (DBG) Log.i(TAG, "Modem firmware already updated.");
-                        // TODO Remove this line below. Only adding for testing purposes.
-                        startCommunitake();
+                        Intent modemCleanUpService = new Intent(this, CleanUpService.class);
+                        modemCleanUpService.setAction(intent.getAction());
+                        this.startService(modemCleanUpService);
+                        if (DBG) Log.i(TAG, "Started Modem Updater Clean Up Service.");
                     }
                     break;
             }
