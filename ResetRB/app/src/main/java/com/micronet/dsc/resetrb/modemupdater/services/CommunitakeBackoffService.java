@@ -58,7 +58,7 @@ public class CommunitakeBackoffService extends IntentService {
                                 // Force stop Communitake and run it again
                                 runShellCommand(new String[]{"am", "force-stop", "com.communitake.mdc.micronet"});
 
-                                sleep(1000);
+                                sleep(5000);
 
                                 // Then launch Communitake
                                 Intent launchIntent = this.getPackageManager().getLaunchIntentForPackage(COMM_APP_NAME);

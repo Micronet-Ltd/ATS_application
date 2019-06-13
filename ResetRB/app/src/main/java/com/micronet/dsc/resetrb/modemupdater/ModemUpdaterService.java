@@ -60,8 +60,8 @@ public class ModemUpdaterService extends IntentService {
     @Override
     protected void onHandleIntent(Intent intent) {
         if (intent != null && intent.getAction() != null) {
-            // Sleep 30 seconds
-            sleep(30000);
+            // Sleep 60 seconds so everything starts up and is running
+            sleep(60000);
 
             // Check if update is needed
             int result = getInt(MODEM_UPDATE_NEEDED_KEY, -1);
@@ -150,20 +150,25 @@ public class ModemUpdaterService extends IntentService {
         // Sleep for initial 15 seconds
         sleep(15000);
 
-        // TODO: Is it bad to start Communitake if it is already running?
+        // TODO: CommuniTake already running?
         try {
-            // If pincode isn't in place, then put it in place
-            // TODO: Is it likely that a pincode will already exist?
+            // TODO: Pincode already in place?
             File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
-            if (!pincodeFile.exists()) {
-                FileWriter fileWriter = new FileWriter(pincodeFile);
-                fileWriter.write(PINCODE);
-                fileWriter.flush();
-                fileWriter.close();
-                if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
-            } else {
-                if (DBG) Log.i(TAG, "Pincode already exists.");
+            for (int i = 0; i < 5; i++){
+                if (!pincodeFile.exists()) {
+                    FileWriter fileWriter = new FileWriter(pincodeFile);
+                    fileWriter.write(PINCODE);
+                    fileWriter.flush();
+                    fileWriter.close();
+                    if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
+                    sleep(1000);
+                } else {
+                    if (DBG) Log.i(TAG, "Pincode already exists.");
+                    break;
+                }
             }
+
+            sleep(5000);
 
             // Then launch Communitake
             Intent launchIntent = this.getPackageManager().getLaunchIntentForPackage(COMM_APP_NAME);
