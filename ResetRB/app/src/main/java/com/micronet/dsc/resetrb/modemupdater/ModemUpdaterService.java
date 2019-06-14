@@ -5,6 +5,7 @@ import android.app.ActivityManager.RunningAppProcessInfo;
 import android.app.IntentService;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Build;
@@ -45,6 +46,7 @@ public class ModemUpdaterService extends IntentService {
     public static final String MODEM_UPDATE_NEEDED_KEY = "ModemFirmwareUpdateNeeded";
     public static final String MODEM_UPDATE_PROCESS_STARTED_KEY = "UpdateProcessStarted";
     public static final String MODEM_UPDATED_AND_CLEANED_KEY = "ModemUpdatedAndDeviceCleaned";
+    public static final String MODEM_UPDATER_STARTS = "LteModemUpdaterStarts";
     public static final String ERROR_CHECKING_MODEM_KEY = "ErrorCheckingModem";
     public static final String ERROR_COULD_NOT_CHECK_MODEM_KEY = "ErrorCouldNotCheckModemMax";
 
@@ -73,14 +75,18 @@ public class ModemUpdaterService extends IntentService {
                 case 1: // If an update is needed then handle broadcast and start needed apps
                     if (intent.getAction()
                             .equalsIgnoreCase(Intent.ACTION_BOOT_COMPLETED)) { // Boot Completed Intent, start Communitake and Modem Updater
-                        if (DBG) Log.i(TAG, "Trying to start Communitake Service");
+                        if (DBG) Log.i(TAG, "Trying to start Communitake Service if updated");
                         startCommunitake();
 
                         if (DBG) Log.i(TAG, "Trying to start LTE Modem Updater");
                         startModemUpdater();
                     } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_REPLACED)) { // New version of ResetRB installed
                         if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.dsc.resetrb")) {
-                            if (DBG) Log.i(TAG, "Trying to start Communitake Service");
+                            if (DBG) Log.i(TAG, "Trying to start Communitake Service if updated");
+                            startCommunitake();
+                            startModemUpdater();
+                        } else if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.communitake.mdc.micronet")) {
+                            if (DBG) Log.i(TAG, "Trying to start Communitake Service if updated");
                             startCommunitake();
                         }
                     } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_ADDED)) { // LTE Modem Updater just installed
@@ -130,6 +136,14 @@ public class ModemUpdaterService extends IntentService {
         if (isAppInstalled(this, MODEM_APP_NAME)) {
             // If LTE Modem Updater isn't running
             if (!isAppRunning(this, MODEM_APP_NAME)) {
+                // Do this to make sure that the device doesn't end up in a continuous reboot loop if the modem can't be updated
+                int numberOfTimesStarted = getInt(MODEM_UPDATER_STARTS, 0);
+                if (numberOfTimesStarted > 15){
+                    if (DBG) Log.e(TAG, "Already passed max amount of Modem Updater starts.");
+                    return;
+                }
+                putInt(MODEM_UPDATER_STARTS, numberOfTimesStarted + 1);
+
                 // Launch LTE Modem Updater
                 Intent launchIntent = this.getPackageManager().getLaunchIntentForPackage(MODEM_APP_NAME);
                 if (launchIntent != null) {
@@ -146,27 +160,50 @@ public class ModemUpdaterService extends IntentService {
         }
     }
 
+    private void writePincode() throws IOException {
+        // TODO: Pincode already in place?
+        File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
+        for (int i = 0; i < 5; i++){
+            if (!pincodeFile.exists()) {
+                FileWriter fileWriter = new FileWriter(pincodeFile);
+                fileWriter.write(PINCODE);
+                fileWriter.flush();
+                fileWriter.close();
+                if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
+                sleep(1000);
+            } else {
+                if (DBG) Log.i(TAG, "Pincode already exists.");
+                break;
+            }
+        }
+    }
+
+    private boolean isUpdatedManageInstalled() {
+        try {
+            PackageInfo pInfo = this.getPackageManager().getPackageInfo(COMM_APP_NAME, 0);
+            String version = pInfo.versionName;
+            Log.d(TAG, "Manage version is: " + version);
+            return version.equalsIgnoreCase("9.3.18");
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.e(TAG, e.toString());
+        }
+
+        return false;
+    }
+
     private void startCommunitake() {
+        // Check if Manage v9.3.18 is installed. If it isn't then don't start CommuniTake
+        if(!isUpdatedManageInstalled()){
+            Log.d(TAG, "Updated manage is not installed. Not starting CommuniTake");
+            return;
+        }
+
         // Sleep for initial 15 seconds
         sleep(15000);
 
         // TODO: CommuniTake already running?
         try {
-            // TODO: Pincode already in place?
-            File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
-            for (int i = 0; i < 5; i++){
-                if (!pincodeFile.exists()) {
-                    FileWriter fileWriter = new FileWriter(pincodeFile);
-                    fileWriter.write(PINCODE);
-                    fileWriter.flush();
-                    fileWriter.close();
-                    if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
-                    sleep(1000);
-                } else {
-                    if (DBG) Log.i(TAG, "Pincode already exists.");
-                    break;
-                }
-            }
+            writePincode();
 
             sleep(5000);
 
