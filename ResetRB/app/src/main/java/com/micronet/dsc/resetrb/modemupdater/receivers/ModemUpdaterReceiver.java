@@ -42,6 +42,10 @@ public class ModemUpdaterReceiver extends BroadcastReceiver {
                             if (DBG) Log.i(TAG, "Broadcast received in ResetRB Modem Updater receiver. Action: " + intent.getAction());
                             // New version of ResetRB installed
                             startModemUpdaterService(context, intent);
+                        } else if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.communitake.mdc.micronet")) {
+                            if (DBG) Log.i(TAG, "Broadcast received in ResetRB Modem Updater receiver. Action: " + intent.getAction());
+                            // Manage package replaced
+                            startModemUpdaterService(context, intent);
                         }
                     } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_ADDED)) {
                         if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.a317modemupdater")) {
@@ -52,7 +56,13 @@ public class ModemUpdaterReceiver extends BroadcastReceiver {
                     }
                 }
             } else {
-                if (DBG) Log.e(TAG, "Error checking modem firmware version. Max checks reached.");
+                // Need this case to start CommuniTake later on if there are issues updating modem firmware.
+                if (intent.getAction() != null && intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_REPLACED) && intent.getDataString() != null
+                        && intent.getDataString().equalsIgnoreCase("package:com.communitake.mdc.micronet")) {
+                    startModemUpdaterService(context, intent);
+                } else {
+//                    if (DBG) Log.e(TAG, "Error checking modem firmware version. Max checks reached.");
+                }
             }
         }
     }

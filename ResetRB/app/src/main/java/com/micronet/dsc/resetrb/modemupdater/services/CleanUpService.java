@@ -5,6 +5,7 @@ import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.MODEM_UP
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.SHARED_PREF_FILE_KEY;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.UPDATE_SUCCESSFUL_ACTION;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.runShellCommand;
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.sleep;
 
 import android.app.IntentService;
 import android.content.Context;
@@ -30,12 +31,6 @@ public class CleanUpService extends IntentService {
             if(intent.getAction().equalsIgnoreCase(UPDATE_SUCCESSFUL_ACTION)){
                 // Modem Firmware Update Successful, clean up communitake and LTE Modem Updater
                 try {
-                    // Force stop communitake, clear communitake, and uninstall updater.
-                    // Not sure if we need to force stop communitake or not.
-                    runShellCommand(new String[]{"am", "force-stop", "com.communitake.mdc.micronet"});
-                    runShellCommand(new String[]{"pm", "clear", "com.communitake.mdc.micronet"});
-                    runShellCommand(new String[]{"pm", "uninstall", "com.micronet.a317modemupdater"});
-
                     // Remove pincode.txt
                     File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
                     if(pincodeFile.exists()){
@@ -49,6 +44,16 @@ public class CleanUpService extends IntentService {
                     }else{
                         Log.i(TAG, "Pincode doesn't exist.");
                     }
+
+                    // Force stop communitake, clear communitake, and uninstall updater.
+                    // Not sure if we need to force stop communitake or not.
+                    runShellCommand(new String[]{"am", "force-stop", "com.communitake.mdc.micronet"});
+                    sleep(500);
+                    runShellCommand(new String[]{"pm", "clear", "com.communitake.mdc.micronet"});
+                    sleep(500);
+                    runShellCommand(new String[]{"pm", "uninstall", "com.communitake.mdc.micronet"});
+                    sleep(500);
+                    runShellCommand(new String[]{"pm", "uninstall", "com.micronet.a317modemupdater"});
 
                     // Update shared preferences
                     SharedPreferences sharedPref = this.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
