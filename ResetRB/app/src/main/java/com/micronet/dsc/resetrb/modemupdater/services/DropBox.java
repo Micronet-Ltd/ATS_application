@@ -28,64 +28,44 @@ class DropBox {
 
     private final String TAG = "ResetRB-DropBox";
     private final String ACCESS_TOKEN = "LPPT11VZzEAAAAAAAAAA4ynGYT6dCM7XhuMS0YJcgt4fkehBOmlVAJTb8jhRPj3w";
-    private DbxClientV2 client;
+    private final String COMM_STARTED_FILENAME = "CommunitakeStarted";
+    private final String COMM_STARTED_DATA = "Started Communitake for first time.";
+    private final String DEVICE_CLEANED_FILENAME = "DeviceCleaned";
+    private final String DEVICE_CLEANED_DATA = "Device successfully cleaned.";
+    private final String ERROR_CHECKING_FILENAME = "ErrorCheckingModemVersion";
+    private final String ERROR_CHECKING_DATA = "Error checking modem version is ResetRB.";
 
-    DropBox(Context context) {
+    private DbxClientV2 client;
+    private String id;
+
+    DropBox() {
         // Create Dropbox client
         DbxRequestConfig config = DbxRequestConfig.newBuilder("LTEModemUpdater/" + BuildConfig.VERSION_NAME).build();
         client = new DbxClientV2(config, ACCESS_TOKEN);
+
+        id = Build.SERIAL;
     }
 
     // Upload when the ModemUpdaterService has started Communitake for the first time
     boolean uploadStartedCommunitake(String dt) {
-        try {
-            String id = Build.SERIAL;
-            InputStream in = new ByteArrayInputStream(("Started Communitake for first time.")
-                    .getBytes(Charset.forName("UTF-8")));
-
-            FileMetadata metadata = client.files().uploadBuilder("/" + id + "/CommunitakeStarted " + dt + ".txt")
-                    .withMode(WriteMode.ADD)
-                    .withAutorename(true).uploadAndFinish(in);
-        } catch (NetworkIOException e) {
-            Log.d(TAG, "Error: no network connection - " + e.toString());
-            return false;
-        } catch (Exception e) {
-            Log.e(TAG, e.toString());
-            return false;
-        }
-
-        return true;
+        return upload(dt, COMM_STARTED_DATA, COMM_STARTED_FILENAME);
     }
 
     // Upload after device has been cleaned in the CleanUpService
     boolean uploadCleanedUpDevice(String dt) {
-        try {
-            String id = Build.SERIAL;
-            InputStream in = new ByteArrayInputStream(("Device successfully cleaned.")
-                    .getBytes(Charset.forName("UTF-8")));
-
-            FileMetadata metadata = client.files().uploadBuilder("/" + id + "/DeviceCleaned " + dt + ".txt")
-                    .withMode(WriteMode.ADD)
-                    .withAutorename(true).uploadAndFinish(in);
-        } catch (NetworkIOException e) {
-            Log.d(TAG, "Error: no network connection - " + e.toString());
-            return false;
-        } catch (Exception e) {
-            Log.e(TAG, e.toString());
-            return false;
-        }
-
-        return true;
+        return upload(dt, DEVICE_CLEANED_DATA, DEVICE_CLEANED_FILENAME);
     }
 
     // Upload after device has been cleaned in the CleanUpService
     boolean uploadErrorCheckingModemVersion(String dt) {
-        try {
-            String id = Build.SERIAL;
-            InputStream in = new ByteArrayInputStream(("Error checking modem version is ResetRB.")
-                    .getBytes(Charset.forName("UTF-8")));
+        return upload(dt, ERROR_CHECKING_DATA, ERROR_CHECKING_FILENAME);
+    }
 
-            FileMetadata metadata = client.files().uploadBuilder("/" + id + "/ErrorCheckingModemVersion " + dt + ".txt")
+    boolean upload(String dt, String data, String filename) {
+        try {
+            InputStream in = new ByteArrayInputStream(data.getBytes(Charset.forName("UTF-8")));
+
+            client.files().uploadBuilder("/" + id + "/" + filename + " " + dt + ".txt")
                     .withMode(WriteMode.ADD)
                     .withAutorename(true).uploadAndFinish(in);
         } catch (NetworkIOException e) {

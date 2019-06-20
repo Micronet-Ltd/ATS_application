@@ -20,7 +20,6 @@ import android.os.Message;
 import android.os.Messenger;
 import android.util.Log;
 
-import com.redbend.client.micronet.IMicronetRBClientAidlInterface;
 
 /**
  * Created by dschmidt on 8/19/16.

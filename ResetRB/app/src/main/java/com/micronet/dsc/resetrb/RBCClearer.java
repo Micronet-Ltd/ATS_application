@@ -136,17 +136,13 @@ public class RBCClearer {
         String result = null;
         int exitCode = -1;
 
-        Process p = null;
+        Process p;
         try {
             p = Runtime.getRuntime().exec(new String[] { "sh", "-c", command } );
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
-
-            result = in.readLine();
-
-            exitCode = p.waitFor();
-
-            in.close();
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                result = in.readLine();
+                exitCode = p.waitFor();
+            }
         } catch (Exception e) {
             Log.e(TAG, "Exception running command: " + command + " : " + e.getMessage());
         }

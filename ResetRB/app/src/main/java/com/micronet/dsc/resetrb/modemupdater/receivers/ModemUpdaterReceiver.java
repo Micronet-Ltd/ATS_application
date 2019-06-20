@@ -1,12 +1,16 @@
 package com.micronet.dsc.resetrb.modemupdater.receivers;
 
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.DBG;
-import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.SHARED_PREF_FILE_KEY;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.COMMUNITAKE_PACKAGE;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.ERROR_COULD_NOT_CHECK_MODEM_KEY;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.MODEM_UPDATED_AND_CLEANED_KEY;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.RESETRB_PACKAGE;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.UPDATER_PACKAGE;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.getBoolean;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.util.Log;
 import com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService;
 
@@ -23,9 +27,8 @@ public class ModemUpdaterReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         // Check shared preferences
-        SharedPreferences sharedPref = context.getSharedPreferences(SHARED_PREF_FILE_KEY, Context.MODE_PRIVATE);
-        boolean updatedAndCleaned = sharedPref.getBoolean("ModemUpdatedAndDeviceCleaned", false);
-        boolean errorMaxChecksReached = sharedPref.getBoolean("ErrorCouldNotCheckModemMax", false);
+        boolean updatedAndCleaned = getBoolean(context, MODEM_UPDATED_AND_CLEANED_KEY, false);
+        boolean errorMaxChecksReached = getBoolean(context, ERROR_COULD_NOT_CHECK_MODEM_KEY, false);
 
         if (updatedAndCleaned) {
             if (DBG) Log.i(TAG, "Modem firmware version already updated and files cleaned.");
@@ -38,17 +41,17 @@ public class ModemUpdaterReceiver extends BroadcastReceiver {
                         // Start Communitake and Modem Updater
                         startModemUpdaterService(context, intent);
                     } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_REPLACED)) {
-                        if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.dsc.resetrb")) {
+                        if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase(RESETRB_PACKAGE)) {
                             if (DBG) Log.i(TAG, "Broadcast received in ResetRB Modem Updater receiver. Action: " + intent.getAction());
                             // New version of ResetRB installed
                             startModemUpdaterService(context, intent);
-                        } else if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.communitake.mdc.micronet")) {
+                        } else if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase(COMMUNITAKE_PACKAGE)) {
                             if (DBG) Log.i(TAG, "Broadcast received in ResetRB Modem Updater receiver. Action: " + intent.getAction());
                             // Manage package replaced
                             startModemUpdaterService(context, intent);
                         }
                     } else if (intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_ADDED)) {
-                        if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase("package:com.micronet.a317modemupdater")) {
+                        if (intent.getDataString() != null && intent.getDataString().equalsIgnoreCase(UPDATER_PACKAGE)) {
                             if (DBG) Log.i(TAG, "Broadcast received in ResetRB Modem Updater receiver. Action: " + intent.getAction());
                             // LTE Modem Updater just installed
                             startModemUpdaterService(context, intent);
@@ -58,7 +61,7 @@ public class ModemUpdaterReceiver extends BroadcastReceiver {
             } else {
                 // Need this case to start CommuniTake later on if there are issues updating modem firmware.
                 if (intent.getAction() != null && intent.getAction().equalsIgnoreCase(Intent.ACTION_PACKAGE_REPLACED) && intent.getDataString() != null
-                        && intent.getDataString().equalsIgnoreCase("package:com.communitake.mdc.micronet")) {
+                        && intent.getDataString().equalsIgnoreCase(COMMUNITAKE_PACKAGE)) {
                     startModemUpdaterService(context, intent);
                 } else {
 //                    if (DBG) Log.e(TAG, "Error checking modem firmware version. Max checks reached.");

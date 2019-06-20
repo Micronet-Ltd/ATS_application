@@ -11,8 +11,8 @@ android {
         applicationId "com.micronet.dsc.resetrb"
         minSdkVersion 15
         targetSdkVersion 26
-        versionCode 233
-        versionName "2.4.2"
+        versionCode 234
+        versionName "2.4.3"
         externalNativeBuild {
             cmake {
                 cppFlags ""
@@ -43,6 +43,10 @@ android {
     }
     lintOptions {
         abortOnError false
+    }
+    compileOptions {
+        sourceCompatibility = '1.8'
+        targetCompatibility = '1.8'
     }
 }
 

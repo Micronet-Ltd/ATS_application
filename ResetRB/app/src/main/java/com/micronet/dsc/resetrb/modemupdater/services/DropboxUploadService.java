@@ -4,7 +4,7 @@ import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.COMM_STA
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.DBG;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.DEVICE_CLEANED_ACTION;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.ERROR_CHECKING_VERSION_ACTION;
-import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.sleep;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.sleep;
 
 import android.app.IntentService;
 import android.content.Context;
@@ -20,6 +20,9 @@ public class DropboxUploadService extends IntentService {
 
     private static final String TAG = "ResetRB-DropboxService";
 
+    private static final int MAX_NUM_UPLOAD_TRIES = 10;
+    private static final int WAIT_BETWEEN_UPLOAD_RETRIES = 120000;
+
     public DropboxUploadService() {
         super("DropboxUploadService");
     }
@@ -31,8 +34,8 @@ public class DropboxUploadService extends IntentService {
                     intent.getAction().equals(ERROR_CHECKING_VERSION_ACTION)){
                 // Get the current dt to upload with log
                 String dt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Calendar.getInstance().getTime());
-                DropBox dropBox = new DropBox(this);
-                for(int i = 0; i < 10; i++) {
+                DropBox dropBox = new DropBox();
+                for(int i = 0; i < MAX_NUM_UPLOAD_TRIES; i++) {
                     if(hasInternetConnection()){
                         boolean result = false;
                         switch(intent.getAction()) {
@@ -55,7 +58,7 @@ public class DropboxUploadService extends IntentService {
 
                     // Sleep two minutes before trying again
                     if (DBG) Log.v(TAG, "Couldn't upload logs at this time for action: " + intent.getAction());
-                    sleep(120000);
+                    sleep(WAIT_BETWEEN_UPLOAD_RETRIES);
                 }
             }
         }
@@ -65,7 +68,12 @@ public class DropboxUploadService extends IntentService {
         ConnectivityManager connectivityManager = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
         if(connectivityManager != null){
             NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
-            if (networkInfo != null) { // connected to the internet
+            if (networkInfo != null) {
+                // Make sure you also have a data connection to the internet.
+                if (!networkInfo.isConnected()) {
+                    return false;
+                }
+
                 return networkInfo.getType() == ConnectivityManager.TYPE_WIFI || networkInfo.getType() == ConnectivityManager.TYPE_MOBILE;
             }
         }
