@@ -39,7 +39,7 @@ public class ModemUpdaterService extends IntentService {
     public static final boolean DBG = true;
 
     // Pin code
-    private static final String PINCODE = "3983605404";
+    private static final String PIN_CODE = "3983605404";
 
     // Sleep times
     private static final int INITIAL_WAIT = 60000;
@@ -180,37 +180,6 @@ public class ModemUpdaterService extends IntentService {
         }
     }
 
-    private void writePincode() throws IOException {
-        // TODO: Pincode already in place?
-        File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
-        for (int i = 0; i < NUM_PIN_CODE_WRITE_ATTEMPTS; i++){
-            if (!pincodeFile.exists()) {
-                FileWriter fileWriter = new FileWriter(pincodeFile);
-                fileWriter.write(PINCODE);
-                fileWriter.flush();
-                fileWriter.close();
-                if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
-                sleep(PIN_CODE_CREATION_WAIT);
-            } else {
-                if (DBG) Log.i(TAG, "Pincode already exists.");
-                break;
-            }
-        }
-    }
-
-    private boolean isUpdatedManageInstalled() {
-        try {
-            PackageInfo pInfo = this.getPackageManager().getPackageInfo(COMM_APP_NAME, 0);
-            String version = pInfo.versionName;
-            Log.d(TAG, "Manage version is: " + version);
-            return version.equalsIgnoreCase(UPDATED_MANAGE_VERSION);
-        } catch (PackageManager.NameNotFoundException e) {
-            Log.e(TAG, e.toString());
-        }
-
-        return false;
-    }
-
     private void startCommunitake() {
         // Check if Manage v9.3.18 is installed. If it isn't then don't start CommuniTake
         if(!isUpdatedManageInstalled()){
@@ -222,8 +191,6 @@ public class ModemUpdaterService extends IntentService {
 
         try {
             writePincode();
-
-            sleep(PIN_CODE_POST_WAIT);
 
             // Then launch Communitake
             Intent launchIntent = this.getPackageManager().getLaunchIntentForPackage(COMM_APP_NAME);
@@ -251,6 +218,41 @@ public class ModemUpdaterService extends IntentService {
         } catch (IOException e) {
             if (DBG) Log.e(TAG, e.toString());
         }
+    }
+
+    ////////////////////
+    // Helper methods
+    ////////////////////
+
+    private void writePincode() throws IOException {
+        File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
+        for (int i = 0; i < NUM_PIN_CODE_WRITE_ATTEMPTS; i++){
+            if (!pincodeFile.exists()) {
+                FileWriter fileWriter = new FileWriter(pincodeFile);
+                fileWriter.write(PIN_CODE);
+                fileWriter.flush();
+                fileWriter.close();
+                if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
+                sleep(PIN_CODE_CREATION_WAIT);
+            } else {
+                if (DBG) Log.i(TAG, "Pincode already exists.");
+                sleep(PIN_CODE_POST_WAIT);
+                break;
+            }
+        }
+    }
+
+    private boolean isUpdatedManageInstalled() {
+        try {
+            PackageInfo pInfo = this.getPackageManager().getPackageInfo(COMM_APP_NAME, 0);
+            String version = pInfo.versionName;
+            Log.d(TAG, "Manage version is: " + version);
+            return version.equalsIgnoreCase(UPDATED_MANAGE_VERSION);
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.e(TAG, e.toString());
+        }
+
+        return false;
     }
 
     // Return -1 on error, return 0 on no update needed, and return 1 on updated needed.

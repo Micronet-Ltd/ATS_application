@@ -44,31 +44,32 @@ public class CommunitakeBackoffService extends IntentService {
                     boolean commRunning = isAppRunning(this, COMM_APP_NAME);
                     boolean modemInstalled = isAppInstalled(this, MODEM_APP_NAME);
 
-                    // If we have cleaned or the updater is already installed then discontinue this loop.
+                    // If we have cleaned or the updater is already installed then exit.
                     if (cleaned || modemInstalled) {
-                        break;
-                    } else {
-                        try {
-                            if(commRunning) {
-                                // Force stop Communitake and run it again
-                                runShellCommand(new String[]{"am", "force-stop", COMM_APP_NAME});
+                        return;
+                    }
 
-                                sleep(WAIT_PERIOD);
+                    // Try to stop then start CommuniTake to make sure it downloads required apps.
+                    try {
+                        if(commRunning) {
+                            // Force stop Communitake and run it again
+                            runShellCommand(new String[]{"am", "force-stop", COMM_APP_NAME});
 
-                                // Then launch Communitake
-                                Intent launchIntent = this.getPackageManager().getLaunchIntentForPackage(COMM_APP_NAME);
-                                if (launchIntent != null) {
-                                    launchIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                    this.startActivity(launchIntent);
-                                    Log.i(TAG, "Sent intent to start Communitake");
-                                    // Start Communitake again
-                                    this.startActivity(launchIntent);
-                                }
+                            sleep(WAIT_PERIOD);
+
+                            // Then launch Communitake
+                            Intent launchIntent = this.getPackageManager().getLaunchIntentForPackage(COMM_APP_NAME);
+                            if (launchIntent != null) {
+                                launchIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+                                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                this.startActivity(launchIntent);
+                                Log.i(TAG, "Sent intent to start Communitake");
+                                // Start Communitake again
+                                this.startActivity(launchIntent);
                             }
-                        }catch (Exception e){
-                            Log.e(TAG, e.toString());
                         }
+                    }catch (Exception e){
+                        Log.e(TAG, e.toString());
                     }
                 }
             }

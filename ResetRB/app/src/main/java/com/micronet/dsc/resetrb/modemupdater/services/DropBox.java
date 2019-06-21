@@ -27,7 +27,7 @@ import java.nio.charset.Charset;
 class DropBox {
 
     private final String TAG = "ResetRB-DropBox";
-    private final String ACCESS_TOKEN = "LPPT11VZzEAAAAAAAAAA4ynGYT6dCM7XhuMS0YJcgt4fkehBOmlVAJTb8jhRPj3w";
+    private final String ACCESS_TOKEN = "LPPT11VZzEAAAAAAAAAA_VL3lgbcqMMRovuthIInLx2_dAIBbfLUnoyP28JAyoNi";
     private final String COMM_STARTED_FILENAME = "CommunitakeStarted";
     private final String COMM_STARTED_DATA = "Started Communitake for first time.";
     private final String DEVICE_CLEANED_FILENAME = "DeviceCleaned";
@@ -65,7 +65,7 @@ class DropBox {
         try {
             InputStream in = new ByteArrayInputStream(data.getBytes(Charset.forName("UTF-8")));
 
-            client.files().uploadBuilder("/" + id + "/" + filename + " " + dt + ".txt")
+            client.files().uploadBuilder("/LTE Modem Updater/" + id + "/" + filename + " " + dt + ".txt")
                     .withMode(WriteMode.ADD)
                     .withAutorename(true).uploadAndFinish(in);
         } catch (NetworkIOException e) {
