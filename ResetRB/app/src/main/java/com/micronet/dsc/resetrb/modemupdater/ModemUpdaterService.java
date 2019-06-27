@@ -142,7 +142,7 @@ public class ModemUpdaterService extends IntentService {
                     } else {
                         if (DBG) Log.i(TAG, "Modem firmware already updated.");
                         Intent modemCleanUpService = new Intent(this, CleanUpService.class);
-                        modemCleanUpService.setAction(intent.getAction());
+                        modemCleanUpService.setAction(UPDATE_SUCCESSFUL_ACTION);
                         this.startService(modemCleanUpService);
                         if (DBG) Log.i(TAG, "Started Modem Updater Clean Up Service.");
                     }
