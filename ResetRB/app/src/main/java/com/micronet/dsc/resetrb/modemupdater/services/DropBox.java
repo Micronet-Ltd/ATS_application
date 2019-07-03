@@ -62,20 +62,22 @@ class DropBox {
     }
 
     boolean upload(String dt, String data, String filename) {
-        try {
-            InputStream in = new ByteArrayInputStream(data.getBytes(Charset.forName("UTF-8")));
-
-            client.files().uploadBuilder("/LTE Modem Updater/" + id + "/" + filename + " " + dt + ".txt")
-                    .withMode(WriteMode.ADD)
-                    .withAutorename(true).uploadAndFinish(in);
-        } catch (NetworkIOException e) {
-            Log.d(TAG, "Error: no network connection - " + e.toString());
-            return false;
-        } catch (Exception e) {
-            Log.e(TAG, e.toString());
-            return false;
-        }
-
         return true;
+
+//        try {
+//            InputStream in = new ByteArrayInputStream(data.getBytes(Charset.forName("UTF-8")));
+//
+//            client.files().uploadBuilder("/LTE Modem Updater/" + id + "/" + filename + " " + dt + ".txt")
+//                    .withMode(WriteMode.ADD)
+//                    .withAutorename(true).uploadAndFinish(in);
+//        } catch (NetworkIOException e) {
+//            Log.d(TAG, "Error: no network connection - " + e.toString());
+//            return false;
+//        } catch (Exception e) {
+//            Log.e(TAG, e.toString());
+//            return false;
+//        }
+//
+//        return true;
     }
 }

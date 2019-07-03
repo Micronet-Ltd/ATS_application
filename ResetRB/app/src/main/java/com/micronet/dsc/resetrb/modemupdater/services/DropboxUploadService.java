@@ -65,18 +65,20 @@ public class DropboxUploadService extends IntentService {
     }
 
     private boolean hasInternetConnection() {
-        ConnectivityManager connectivityManager = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if(connectivityManager != null){
-            NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
-            if (networkInfo != null) {
-                // Make sure you also have a data connection to the internet.
-                if (!networkInfo.isConnected()) {
-                    return false;
-                }
+        return true;
 
-                return networkInfo.getType() == ConnectivityManager.TYPE_WIFI || networkInfo.getType() == ConnectivityManager.TYPE_MOBILE;
-            }
-        }
-        return false;
+//        ConnectivityManager connectivityManager = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
+//        if(connectivityManager != null){
+//            NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
+//            if (networkInfo != null) {
+//                // Make sure you also have a data connection to the internet.
+//                if (!networkInfo.isConnected()) {
+//                    return false;
+//                }
+//
+//                return networkInfo.getType() == ConnectivityManager.TYPE_WIFI || networkInfo.getType() == ConnectivityManager.TYPE_MOBILE;
+//            }
+//        }
+//        return false;
     }
 }
