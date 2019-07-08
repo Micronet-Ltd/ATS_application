@@ -1,5 +1,6 @@
 package com.micronet.dsc.resetrb.modemupdater.receivers;
 
+import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.COMM_APP_NAME;
 import static com.micronet.dsc.resetrb.modemupdater.ModemUpdaterService.DBG;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.COMMUNITAKE_PACKAGE;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.ERROR_COULD_NOT_CHECK_MODEM_KEY;
@@ -7,6 +8,7 @@ import static com.micronet.dsc.resetrb.modemupdater.Utils.MODEM_UPDATED_AND_CLEA
 import static com.micronet.dsc.resetrb.modemupdater.Utils.RESETRB_PACKAGE;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.UPDATER_PACKAGE;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.getBoolean;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.isAppInstalled;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
