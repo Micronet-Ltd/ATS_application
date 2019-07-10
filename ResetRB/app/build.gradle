@@ -11,8 +11,8 @@ android {
         applicationId "com.micronet.dsc.resetrb"
         minSdkVersion 15
         targetSdkVersion 26
-        versionCode 236
-        versionName "2.4.5-nologs"
+        versionCode 237
+        versionName "2.4.6-nologs"
         externalNativeBuild {
             cmake {
                 cppFlags ""

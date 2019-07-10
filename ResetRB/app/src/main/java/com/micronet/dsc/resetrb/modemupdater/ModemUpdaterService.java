@@ -3,11 +3,13 @@ package com.micronet.dsc.resetrb.modemupdater;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.COMMUNITAKE_PACKAGE;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.ERROR_CHECKING_MODEM_KEY;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.ERROR_COULD_NOT_CHECK_MODEM_KEY;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.MODEM_UPDATED_AND_CLEANED_KEY;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.MODEM_UPDATER_STARTS;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.MODEM_UPDATE_NEEDED_KEY;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.MODEM_UPDATE_PROCESS_STARTED_KEY;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.RESETRB_PACKAGE;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.UPDATER_PACKAGE;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.getBoolean;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.getInt;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.isAppInstalled;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.isAppRunning;
@@ -73,6 +75,7 @@ public class ModemUpdaterService extends IntentService {
     public static final String ERROR_CHECKING_VERSION_ACTION = "com.micronet.dsc.resetrb.modemupdater.ERROR_CHECKING_VERSION";
 
     public static final int MAX_NUMBER_OF_CHECKS = 5;
+    public static final int NUMBER_STARTS_BEFORE_COMM_START = 2;
 
 
     public ModemUpdaterService() {
@@ -84,6 +87,13 @@ public class ModemUpdaterService extends IntentService {
         if (intent != null && intent.getAction() != null) {
             // Sleep 60 seconds so everything starts up and is running
             sleep(INITIAL_WAIT);
+
+            // Check to make sure not already updated and cleaned
+            boolean updatedAndCleaned = getBoolean(this, MODEM_UPDATED_AND_CLEANED_KEY, false);
+            if (updatedAndCleaned) {
+                Log.d(TAG, "Already updated and cleaned. Returning from Modem Updater Service.");
+                return;
+            }
 
             // Check if update is needed
             int result = getInt(this, MODEM_UPDATE_NEEDED_KEY, UPDATE_NEEDED_UNKNOWN);
@@ -181,6 +191,13 @@ public class ModemUpdaterService extends IntentService {
     }
 
     private void startCommunitake() {
+        // If modem updater has been started multiple times then that means it erred out updating
+        int numberOfModemUpdaterStarts = getInt(this, MODEM_UPDATER_STARTS, 0);
+        if (DBG) Log.d(TAG, "Number of LTE Modem Updater starts: " + numberOfModemUpdaterStarts);
+        if (numberOfModemUpdaterStarts <= NUMBER_STARTS_BEFORE_COMM_START) {
+            return;
+        }
+
         // Check if Manage v9.3.18 is installed. If it isn't then don't start CommuniTake
         if(!isUpdatedManageInstalled()){
             Log.d(TAG, "Updated manage is not installed. Not starting CommuniTake");
@@ -226,20 +243,25 @@ public class ModemUpdaterService extends IntentService {
 
     private void writePincode() throws IOException {
         File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
-        for (int i = 0; i < NUM_PIN_CODE_WRITE_ATTEMPTS; i++){
-            if (!pincodeFile.exists()) {
-                FileWriter fileWriter = new FileWriter(pincodeFile);
-                fileWriter.write(PIN_CODE);
-                fileWriter.flush();
-                fileWriter.close();
-                if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
-                sleep(PIN_CODE_CREATION_WAIT);
+
+        // Delete pincode if it already exists
+        if(pincodeFile.exists()) {
+            boolean deleted = pincodeFile.delete();
+            if (deleted) {
+                if (DBG) Log.d(TAG, "Deleted old pincode");
             } else {
-                if (DBG) Log.i(TAG, "Pincode already exists.");
-                sleep(PIN_CODE_POST_WAIT);
-                break;
+                if (DBG) Log.e(TAG, "Error deleting old pincode");
             }
+            sleep(PIN_CODE_CREATION_WAIT);
         }
+
+        // Write pincode out
+        FileWriter fileWriter = new FileWriter(pincodeFile);
+        fileWriter.write(PIN_CODE);
+        fileWriter.flush();
+        fileWriter.close();
+        if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
+        sleep(PIN_CODE_CREATION_WAIT);
     }
 
     private boolean isUpdatedManageInstalled() {
