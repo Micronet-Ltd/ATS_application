@@ -30,6 +30,10 @@ public class Utils {
     public static final String MODEM_UPDATER_STARTS = "LteModemUpdaterStarts";
     public static final String ERROR_CHECKING_MODEM_KEY = "ErrorCheckingModem";
     public static final String ERROR_COULD_NOT_CHECK_MODEM_KEY = "ErrorCouldNotCheckModemMax";
+    public static final String PREVIOUS_PINCODE = "PreviousPinCode";
+    public static final String FIRST_PINCODE_CHECK = "FirstPinCodeCheck";
+    public static final String FIRST_COMM_CHECK = "FirstCommCheck";
+    public static final String UPDATED_COMM_ALREADY_INSTALLED = "UpdatedCommAlreadyInstalled";
 
     public static final String PIN_CODE_PATH = "data/internal_Storage/Gsd/pincode.txt";
 

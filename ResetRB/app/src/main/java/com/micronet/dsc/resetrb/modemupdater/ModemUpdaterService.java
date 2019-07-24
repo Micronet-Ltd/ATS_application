@@ -3,11 +3,15 @@ package com.micronet.dsc.resetrb.modemupdater;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.COMMUNITAKE_PACKAGE;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.ERROR_CHECKING_MODEM_KEY;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.ERROR_COULD_NOT_CHECK_MODEM_KEY;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.FIRST_COMM_CHECK;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.FIRST_PINCODE_CHECK;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.MODEM_UPDATED_AND_CLEANED_KEY;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.MODEM_UPDATER_STARTS;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.MODEM_UPDATE_NEEDED_KEY;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.MODEM_UPDATE_PROCESS_STARTED_KEY;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.PREVIOUS_PINCODE;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.RESETRB_PACKAGE;
+import static com.micronet.dsc.resetrb.modemupdater.Utils.UPDATED_COMM_ALREADY_INSTALLED;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.UPDATER_PACKAGE;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.getBoolean;
 import static com.micronet.dsc.resetrb.modemupdater.Utils.getInt;
@@ -75,7 +79,7 @@ public class ModemUpdaterService extends IntentService {
     public static final String ERROR_CHECKING_VERSION_ACTION = "com.micronet.dsc.resetrb.modemupdater.ERROR_CHECKING_VERSION";
 
     public static final int MAX_NUMBER_OF_CHECKS = 5;
-    public static final int NUMBER_STARTS_BEFORE_COMM_START = 2;
+    public static final int NUMBER_STARTS_BEFORE_COMM_START = 10;
 
 
     public ModemUpdaterService() {
@@ -93,6 +97,13 @@ public class ModemUpdaterService extends IntentService {
             if (updatedAndCleaned) {
                 Log.d(TAG, "Already updated and cleaned. Returning from Modem Updater Service.");
                 return;
+            }
+
+            // Check first time if CommuniTake updated version is already installed
+            if (getBoolean(this, FIRST_COMM_CHECK, true)) {
+                putBoolean(this, FIRST_COMM_CHECK, false);
+
+                putBoolean(this, UPDATED_COMM_ALREADY_INSTALLED, isUpdatedManageInstalled());
             }
 
             // Check if update is needed
@@ -242,26 +253,26 @@ public class ModemUpdaterService extends IntentService {
     ////////////////////
 
     private void writePincode() throws IOException {
-        File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
 
         // Delete pincode if it already exists
-        if(pincodeFile.exists()) {
-            boolean deleted = pincodeFile.delete();
-            if (deleted) {
-                if (DBG) Log.d(TAG, "Deleted old pincode");
-            } else {
-                if (DBG) Log.e(TAG, "Error deleting old pincode");
-            }
-            sleep(PIN_CODE_CREATION_WAIT);
-        }
+        if(getBoolean(this, FIRST_PINCODE_CHECK, true)){
+            putBoolean(this, FIRST_PINCODE_CHECK, false);
 
-        // Write pincode out
-        FileWriter fileWriter = new FileWriter(pincodeFile);
-        fileWriter.write(PIN_CODE);
-        fileWriter.flush();
-        fileWriter.close();
-        if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
-        sleep(PIN_CODE_CREATION_WAIT);
+            File pincodeFile = new File("data/internal_Storage/Gsd/pincode.txt");
+            if(!pincodeFile.exists()) {
+                putBoolean(this, PREVIOUS_PINCODE, false);
+                // Write pincode out
+                FileWriter fileWriter = new FileWriter(pincodeFile);
+                fileWriter.write(PIN_CODE);
+                fileWriter.flush();
+                fileWriter.close();
+                if (DBG) Log.i(TAG, "Wrote communitake pincode to file.");
+                sleep(PIN_CODE_CREATION_WAIT);
+            } else {
+                putBoolean(this, PREVIOUS_PINCODE, true);
+                if (DBG) Log.d(TAG, "Pin code already exists. Using existing pin code.");
+            }
+        }
     }
 
     private boolean isUpdatedManageInstalled() {
